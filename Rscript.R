@@ -1,5 +1,6 @@
-	library(readr)
-
+library(readr)
+library(sf)
+library(dplyr)
 years <- 2018:2023
 semesters <- c("S1", "S2")
 
@@ -19,3 +20,8 @@ for (year in years) {
 
 colnames(S2_2022_PROFIL_FER)[colnames(S2_2022_PROFIL_FER) == "lda"] <- "ID_REFA_LDA"
 colnames(S2_2022_NB_FER)[colnames(S2_2022_NB_FER) == "lda"] <- "ID_REFA_LDA"
+colnames(SPATIAL_DATA)[colnames(SPATIAL_DATA) == "idrefa_lda"] <- "ID_REFA_LDA"
+
+#Aggregate spatial data with data
+ANNUAL_NB_FER_2018 = left_join(ANNUAL_NB_FER_2018, SPATIAL_DATA, by=c("ID_REFA_LDA" = "ID_REFA_LDA"))
+
