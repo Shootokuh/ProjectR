@@ -1,5 +1,4 @@
 library(dplyr)
-library(ggplot2)
 
 # Annual NB_FER
 ANNUAL_NB_FER_2018 = rbind(S1_2018_NB_FER,S2_2018_NB_FER)

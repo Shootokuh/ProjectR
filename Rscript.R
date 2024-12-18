@@ -31,11 +31,11 @@ for (year in years) {
 
 colnames(S2_2022_PROFIL_FER)[colnames(S2_2022_PROFIL_FER) == "lda"] <- "ID_REFA_LDA"
 colnames(S2_2022_NB_FER)[colnames(S2_2022_NB_FER) == "lda"] <- "ID_REFA_LDA"
-colnames(SPATIAL_DATA)[colnames(SPATIAL_DATA) == "idrefa_lda"] <- "ID_REFA_LDA"
 
 # Spatial data
 SPATIAL_DATA = st_read("REF_ZdA/PL_ZDL_R_17_12_2024.shp", crs=4326)
 
+colnames(SPATIAL_DATA)[colnames(SPATIAL_DATA) == "idrefa_lda"] <- "ID_REFA_LDA"
+
 #Aggregate spatial data with data
 ANNUAL_NB_FER_2018 = left_join(ANNUAL_NB_FER_2018, SPATIAL_DATA, by=c("ID_REFA_LDA" = "ID_REFA_LDA"))
-
