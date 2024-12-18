@@ -47,6 +47,29 @@ for (year in years) {
   }
 }
 
+# Rangement des semestres PROFIL_FER dans une liste
+sn_profil_fer_year <- list(S1_2018_PROFIL_FER, S2_2018_PROFIL_FER,
+                           S1_2019_PROFIL_FER, S2_2019_PROFIL_FER,
+                           S1_2020_PROFIL_FER, S2_2020_PROFIL_FER,
+                           S1_2021_PROFIL_FER, S2_2021_PROFIL_FER,
+                           S1_2022_PROFIL_FER, S2_2022_PROFIL_FER)
+
+# Supression des Valeurs 'ND' dans chaque dataframe PROFIL_FER 
+for (i in seq_along(sn_profil_fer_year)) {
+  sn_profil_fer_year[[i]] = sn_profil_fer_year[[i]] %>% filter(TRNC_HORR_60 != "ND")
+}
+
+S1_2018_PROFIL_FER <- sn_profil_fer_year[[1]]
+S2_2018_PROFIL_FER <- sn_profil_fer_year[[2]]
+S1_2019_PROFIL_FER <- sn_profil_fer_year[[3]]
+S2_2019_PROFIL_FER <- sn_profil_fer_year[[4]]
+S1_2020_PROFIL_FER <- sn_profil_fer_year[[5]]
+S2_2020_PROFIL_FER <- sn_profil_fer_year[[6]]
+S1_2021_PROFIL_FER <- sn_profil_fer_year[[7]]
+S2_2021_PROFIL_FER <- sn_profil_fer_year[[8]]
+S1_2022_PROFIL_FER <- sn_profil_fer_year[[9]]
+S2_2022_PROFIL_FER <- sn_profil_fer_year[[10]]
+
 
 # Spatial data
 SPATIAL_DATA = st_read("REF_ZdA/PL_ZDL_R_17_12_2024.shp", crs=4326)
@@ -83,6 +106,21 @@ ANNUAL_NB_FER_2019 <- years_data_nb[[2]]
 ANNUAL_NB_FER_2020 <- years_data_nb[[3]]
 ANNUAL_NB_FER_2021 <- years_data_nb[[4]]
 ANNUAL_NB_FER_2022 <- years_data_nb[[5]]
+
+# Remplacement des virgules et conversion en numérique des valeurs pourc_validations
+# Suppression des valeurs 'ND' 
+for(i in seq_along(years_data_profil)){
+  years_data_profil[[i]]$pourc_validations <- gsub(",", ".", years_data_profil[[i]]$pourc_validations)
+  years_data_profil[[i]]$pourc_validations <- as.numeric(years_data_profil[[i]]$pourc_validations)
+  years_data_profil[[i]] = years_data_profil[[i]] %>% filter(TRNC_HORR_60 != "ND")
+}
+
+ANNUAL_PROFIL_FER_2018 <- years_data_profil[[1]]
+ANNUAL_PROFIL_FER_2019 <- years_data_profil[[2]]
+ANNUAL_PROFIL_FER_2020 <- years_data_profil[[3]]
+ANNUAL_PROFIL_FER_2021 <- years_data_profil[[4]]
+ANNUAL_PROFIL_FER_2022 <- years_data_profil[[5]]
+
 
 #allDataFrameNB <- do.call(rbind, years_data_nb)
 
