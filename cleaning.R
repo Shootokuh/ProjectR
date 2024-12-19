@@ -57,6 +57,8 @@ sn_profil_fer_year <- list(S1_2018_PROFIL_FER, S2_2018_PROFIL_FER,
 # Supression des Valeurs 'ND' dans chaque dataframe PROFIL_FER 
 for (i in seq_along(sn_profil_fer_year)) {
   sn_profil_fer_year[[i]] = sn_profil_fer_year[[i]] %>% filter(TRNC_HORR_60 != "ND")
+  sn_profil_fer_year[[i]]$pourc_validations <- gsub(",", ".", sn_profil_fer_year[[i]]$pourc_validations)
+  sn_profil_fer_year[[i]]$pourc_validations <- as.numeric(sn_profil_fer_year[[i]]$pourc_validations)
 }
 
 S1_2018_PROFIL_FER <- sn_profil_fer_year[[1]]
@@ -76,51 +78,46 @@ SPATIAL_DATA = st_read("REF_ZdA/PL_ZDL_R_17_12_2024.shp", crs=4326)
 
 colnames(SPATIAL_DATA)[colnames(SPATIAL_DATA) == "idrefa_lda"] <- "ID_REFA_LDA"
 
-# On left_join la spatial data sur tout les ANNUAL_NB_FER
+
 for (year in 2018:2022) {
   annual_nb_fer <- get(paste0("ANNUAL_NB_FER_", year))
+  
+  # Jointure des spatial data avec les ANNUAL_NB_FER
   annual_nb_fer <- left_join(annual_nb_fer, SPATIAL_DATA, by = c("ID_REFA_LDA" = "ID_REFA_LDA"))
-  assign(paste0("ANNUAL_NB_FER_", year), annual_nb_fer)
-}
-
-#On enregistre tout les NB fer dans une liste
-years_data_nb <- list(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020, 
-                      ANNUAL_NB_FER_2021, ANNUAL_NB_FER_2022)
-
-#On enregistre tout les NB profil dans une liste
-years_data_profil <- list(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, 
-                          ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
-
-# On change pour chaque année les données dans CATEGORIE_TITRE par autre
-for (i in seq_along(years_data_nb)) {
-  years_data_nb[[i]] <- years_data_nb[[i]] %>%
+  
+  # Changement des données incohérentes dans CATEGORIE_TITRE par 'autre'
+  annual_nb_fer <- annual_nb_fer %>%
     mutate(CATEGORIE_TITRE = recode(CATEGORIE_TITRE,
                                     "?" = "autre",
                                     "NON DEFINI" = "autre",
                                     "AUTRE TITRE" = "autre"))
+  
+  # Ajout d'une colonne WEEK de type numérique 
+  annual_nb_fer$WEEK <- strftime(annual_nb_fer$JOUR, format = "%V")
+  annual_nb_fer$WEEK <- as.numeric(annual_nb_fer$WEEK)
+  
+  assign(paste0("ANNUAL_NB_FER_", year), annual_nb_fer)
+  
+  annual_profil_fer <- get(paste0("ANNUAL_PROFIL_FER_", year))
+  
+  
+  # Remplacement des virgules et conversion en numérique des valeurs pourc_validations
+  annual_profil_fer$pourc_validations <- gsub(",", ".", annual_profil_fer$pourc_validations)
+  annual_profil_fer$pourc_validations <- as.numeric(annual_profil_fer$pourc_validations)
+  
+  # Suppression des valeurs 'ND' 
+  annual_profil_fer <- annual_profil_fer %>% filter(TRNC_HORR_60 != "ND")
+  
+  assign(paste0("ANNUAL_PROFIL_FER_", year), annual_profil_fer)
 }
 
-# Réassigner les changements a la data d'origine
-ANNUAL_NB_FER_2018 <- years_data_nb[[1]]
-ANNUAL_NB_FER_2019 <- years_data_nb[[2]]
-ANNUAL_NB_FER_2020 <- years_data_nb[[3]]
-ANNUAL_NB_FER_2021 <- years_data_nb[[4]]
-ANNUAL_NB_FER_2022 <- years_data_nb[[5]]
+# Enregistrement de tout les NB fer dans une liste
+years_data_nb <- list(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020, 
+                      ANNUAL_NB_FER_2021, ANNUAL_NB_FER_2022)
 
-# Remplacement des virgules et conversion en numérique des valeurs pourc_validations
-# Suppression des valeurs 'ND' 
-for(i in seq_along(years_data_profil)){
-  years_data_profil[[i]]$pourc_validations <- gsub(",", ".", years_data_profil[[i]]$pourc_validations)
-  years_data_profil[[i]]$pourc_validations <- as.numeric(years_data_profil[[i]]$pourc_validations)
-  years_data_profil[[i]] = years_data_profil[[i]] %>% filter(TRNC_HORR_60 != "ND")
-}
-
-ANNUAL_PROFIL_FER_2018 <- years_data_profil[[1]]
-ANNUAL_PROFIL_FER_2019 <- years_data_profil[[2]]
-ANNUAL_PROFIL_FER_2020 <- years_data_profil[[3]]
-ANNUAL_PROFIL_FER_2021 <- years_data_profil[[4]]
-ANNUAL_PROFIL_FER_2022 <- years_data_profil[[5]]
-
+# Enregistrement de tout les NB profil dans une liste
+years_data_profil <- list(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, 
+                          ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
 
 #allDataFrameNB <- do.call(rbind, years_data_nb)
 
