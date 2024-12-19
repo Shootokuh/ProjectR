@@ -5,6 +5,8 @@ library(ggplot2)
 
 ANNUAL_NB_FER_2018$WEEK <- strftime(ANNUAL_NB_FER_2018$JOUR, format = "%V")
 ANNUAL_NB_FER_2018$WEEK <- as.numeric(ANNUAL_NB_FER_2018$WEEK)
+ANNUAL_NB_FER_2018$YEAR <- strftime(ANNUAL_NB_FER_2018$JOUR, format = "%Y")
+ANNUAL_NB_FER_2018$YEAR <- as.numeric(ANNUAL_NB_FER_2018$YEAR)
 dataAboveMeanByWeekYear2018 = dataByWeekYear2018 %>% filter(n <= meanWeek)
 
 ################################################################################
