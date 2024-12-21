@@ -124,7 +124,6 @@ years_data_nb <- list(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020
 years_data_profil <- list(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, 
                           ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
 
-
 #allDataFrameNB <- do.call(rbind, years_data_nb)
 
 #allDataFrameProfile = do.call(rbind, years_data_profil)
