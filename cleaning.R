@@ -78,6 +78,11 @@ SPATIAL_DATA = st_read("REF_ZdA/PL_ZDL_R_17_12_2024.shp", crs=4326)
 
 colnames(SPATIAL_DATA)[colnames(SPATIAL_DATA) == "idrefa_lda"] <- "ID_REFA_LDA"
 
+#Adaptation des données spatiales à la région Île-de-France
+st_crs(SPATIAL_DATA) <- 2154
+
+SPATIAL_DATA <- st_transform(SPATIAL_DATA, crs = 4326)
+
 
 for (year in 2018:2022) {
   annual_nb_fer <- get(paste0("ANNUAL_NB_FER_", year))
@@ -118,6 +123,7 @@ years_data_nb <- list(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020
 # Enregistrement de tout les NB profil dans une liste
 years_data_profil <- list(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, 
                           ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
+
 
 #allDataFrameNB <- do.call(rbind, years_data_nb)
 
