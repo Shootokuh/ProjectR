@@ -6,16 +6,18 @@ library(leaflet)
 library(ggplot2)
 library(lubridate)
 
+
+
 spatial_data = readRDS("Spatial_data.RDS")
 
 spatial_data <- st_transform(spatial_data, crs = 4326)
 
-spatial_data <- head(spatial_data, 100) #A RETIRER
+spatial_data <- spatial_data %>% filter(grepl("^77", spatial_data$commune)) #A RETIRER
 
-coords <- st_coordinates(spatial_data)
+#coords <- st_coordinates(spatial_data)
 
-coords_df <- data.frame(lon = coords[,1], lat = coords[,2])
-coords_df <- head(coords_df, 8)
+#coords_df <- data.frame(lon = coords[,1], lat = coords[,2])
+#coords_df <- head(coords_df, 8)
 
 ui <- fluidPage(
   
@@ -73,7 +75,7 @@ server <- function(input, output) {
   filtered_data <- reactive({
     type_arret_select <- input$type_arret
     
-    filtered = spatial_data %>% filter(type_arret == type_arret_select)
+    filtered = spatial_data %>% filter(spatial_data$type_arret == type_arret_select)
     
     return(filtered)
   })
@@ -86,8 +88,8 @@ server <- function(input, output) {
       addPolygons(
         weight = 4,
         color = "blue",
-        label = spatial_data$nom_lda,
-        layerId = spatial_data$nom_lda
+        label = data$nom,
+        layerId = data$nom
         
       )
      
