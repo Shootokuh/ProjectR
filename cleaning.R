@@ -146,6 +146,7 @@ for (year in 2018:2022) {
   assign(paste0("ANNUAL_PROFIL_FER_", year), annual_profil_fer)
 }
 
+ANNUAL_NB_FER_2018$weekday = weekdays(ANNUAL_NB_FER_2018$JOUR)
 ANNUAL_NB_FER_2018$weekday <- factor(
   ANNUAL_NB_FER_2018$weekday,
   levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
