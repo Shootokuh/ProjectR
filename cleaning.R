@@ -5,6 +5,23 @@ library(dplyr)
 # Supprime toute les données 
 rm(list = ls())
 
+ile_de_france_departments <- c("75", "77", "78", "91", "92", "93", "94", "95")
+
+get_season <- function(date) {
+  month <- as.numeric(format(date, "%m"))
+  day <- as.numeric(format(date, "%d"))
+  
+  if ((month == 12 && day >= 21) || month %in% c(1, 2) || (month == 3 && day < 21)) {
+    return("Hiver")
+  } else if ((month == 3 && day >= 21) || month %in% c(4, 5) || (month == 6 && day < 21)) {
+    return("Printemps")
+  } else if ((month == 6 && day >= 21) || month %in% c(7, 8) || (month == 9 && day < 21)) {
+    return("Été")
+  } else {
+    return("Automne")
+  }
+}
+
 years <- 2018:2023
 semesters <- c("S1", "S2")
 
@@ -83,12 +100,14 @@ st_crs(SPATIAL_DATA) <- 2154
 
 SPATIAL_DATA <- st_transform(SPATIAL_DATA, crs = 4326)
 
+SPATIAL_DATA <- SPATIAL_DATA %>%
+  filter(substr(commune, 1, 2) %in% ile_de_france_departments)
 
 for (year in 2018:2022) {
   annual_nb_fer <- get(paste0("ANNUAL_NB_FER_", year))
   
   # Jointure des spatial data avec les ANNUAL_NB_FER
-  annual_nb_fer <- left_join(annual_nb_fer, SPATIAL_DATA, by = c("ID_REFA_LDA" = "ID_REFA_LDA"))
+  #annual_nb_fer <- left_join(annual_nb_fer, SPATIAL_DATA, by = c("ID_REFA_LDA" = "ID_REFA_LDA"))
   
   # Changement des données incohérentes dans CATEGORIE_TITRE par 'autre'
   annual_nb_fer <- annual_nb_fer %>%
@@ -100,6 +119,17 @@ for (year in 2018:2022) {
   # Ajout d'une colonne WEEK de type numérique 
   annual_nb_fer$WEEK <- strftime(annual_nb_fer$JOUR, format = "%V")
   annual_nb_fer$WEEK <- as.numeric(annual_nb_fer$WEEK)
+  
+  annual_nb_fer$YEAR <- strftime(annual_nb_fer$JOUR, format = "%Y")
+  annual_nb_fer$YEAR <- as.numeric(annual_nb_fer$YEAR)
+  
+  annual_nb_fer$year_week <- paste0(annual_nb_fer$YEAR, "-W", annual_nb_fer$WEEK)
+
+  annual_nb_fer$weekday <- weekdays(annual_nb_fer$JOUR)
+  
+  annual_nb_fer$year_week <- factor(annual_nb_fer$year_week, levels = unique(annual_nb_fer$year_week))
+  
+  annual_nb_fer$saison <- sapply(as.Date(annual_nb_fer$JOUR), get_season)
   
   assign(paste0("ANNUAL_NB_FER_", year), annual_nb_fer)
   
@@ -116,6 +146,11 @@ for (year in 2018:2022) {
   assign(paste0("ANNUAL_PROFIL_FER_", year), annual_profil_fer)
 }
 
+ANNUAL_NB_FER_2018$weekday <- factor(
+  ANNUAL_NB_FER_2018$weekday,
+  levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+)
+
 # Enregistrement de tout les NB fer dans une liste
 years_data_nb <- list(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020, 
                       ANNUAL_NB_FER_2021, ANNUAL_NB_FER_2022)
@@ -124,6 +159,16 @@ years_data_nb <- list(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020
 years_data_profil <- list(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, 
                           ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
 
+
+#for (i in seq_along(years_data_nb)) {
+#  years_data_nb[[i]]$weekday <- weekdays(years_data_nb[[i]]$JOUR)
+#}
+
+#ANNUAL_NB_FER_2018 = years_data_nb[[1]]
+#ANNUAL_NB_FER_2019 = years_data_nb[[2]]
+#ANNUAL_NB_FER_2020 = years_data_nb[[3]]
+#ANNUAL_NB_FER_2021 = years_data_nb[[4]]
+#ANNUAL_NB_FER_2022 = years_data_nb[[5]]
 #allDataFrameNB <- do.call(rbind, years_data_nb)
 
 #allDataFrameProfile = do.call(rbind, years_data_profil)
