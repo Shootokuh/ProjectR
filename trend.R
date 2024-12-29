@@ -3,7 +3,7 @@ library(ggplot2)
 
 ################################################################################
 # A CORRIGER !!! FAIRE LA MOYENNE ET NON PAS LA SOMME POUR LES DATA SUR SEMAINES
-# / DAY / SAISON                                                               #
+# / DAY / SAISON                                                               x#
 ################################################################################
 
 ANNUAL_NB_FER_2021$WEEK <- strftime(ANNUAL_NB_FER_2021$JOUR, format = "%V")
@@ -141,3 +141,7 @@ ggplot(utilisationTitre, aes(x = year_week, y = nb_valid, group = 1)) +
   theme_light() +
   ggtitle("Type d'utilisation de titre par semaine en moyenne sur les années 2018-2021")
 
+
+################################################################################
+# PAR ARRET                                                                    #
+################################################################################
