@@ -146,11 +146,12 @@ for (year in 2018:2022) {
   assign(paste0("ANNUAL_PROFIL_FER_", year), annual_profil_fer)
 }
 
-ANNUAL_NB_FER_2018$weekday = weekdays(ANNUAL_NB_FER_2018$JOUR)
 ANNUAL_NB_FER_2018$weekday <- factor(
   ANNUAL_NB_FER_2018$weekday,
   levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 )
+
+ANNUAL_NB_FER_2018$weekday = weekdays(ANNUAL_NB_FER_2018$JOUR)
 
 # Enregistrement de tout les NB fer dans une liste
 years_data_nb <- list(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020, 
@@ -173,3 +174,23 @@ years_data_profil <- list(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL
 #allDataFrameNB <- do.call(rbind, years_data_nb)
 
 #allDataFrameProfile = do.call(rbind, years_data_profil)
+
+t = left_join(SPATIAL_DATA, ANNUAL_NB_FER_2018, by = c("ID_REFA_LDA" = "ID_REFA_LDA"))
+
+#categorie_max <- t %>%
+#  group_by(t$CATEGORIE_TITRE) %>%
+#  summarise(total_validation = sum(t$NB_VALD)) %>% head(1)
+
+#heure de pointe + pourcentage validations
+horaire_pointe_lognes <- t %>%
+  filter(nom == "Torcy") %>%  # Filtrer les données pour l'arrêt "Lognes"
+  group_by(TRNC_HORR_60) %>%    # Grouper par horaire (ou la colonne horaire souhaitée)
+  summarise(total = sum(pourc_validations)) %>%
+  arrange(desc(total))# Calculer la somme des validations
+#Categorie + utilisé
+categorie <- t %>%
+  filter(nom == "Torcy") %>%  # Filtrer les données pour l'arrêt "Lognes"
+  group_by(CATEGORIE_TITRE) %>%    # Grouper par horaire (ou la colonne horaire souhaitée)
+  summarise(total = sum(NB_VALD)) %>%
+  arrange(desc(total))# Calculer la somme des validations
+
