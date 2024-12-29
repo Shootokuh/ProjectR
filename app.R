@@ -33,8 +33,7 @@ ui <- fluidPage(
   
   navbarPage(
     title = NULL,
-    tabPanel(
-      "Carte",
+    tabPanel("Tendances par arrêt",
       sidebarLayout(
         sidebarPanel(
           selectInput("dep",
@@ -85,11 +84,6 @@ ui <- fluidPage(
 
 # Serveur
 server <- function(input, output) {
-  # Créer une sortie basée sur l'entrée utilisateur
-  output$result <- renderText({
-    paste("Vous avez choisi le nombre :", input$num)
-  })
-  
   filtered_data <- reactive({
     type_arret_select <- input$type_arret
     dep_select <- input$dep
@@ -105,11 +99,10 @@ server <- function(input, output) {
     data = filtered_data()
     
     if (nrow(data) == 0) {
-      # Aucun élément correspondant : afficher un message
       leaflet() %>%
         addTiles() %>%
         addPopups(
-          lng = 2.3522, lat = 48.8566, # Coordonnées par défaut pour afficher le message (exemple : Paris)
+          lng = 2.3522, lat = 48.8566,
           popup = "Aucun arrêt de ce type dans ce département"
         )
     }
