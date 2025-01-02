@@ -22,6 +22,8 @@ get_season <- function(date) {
   }
 }
 
+S1_2023_NB_FER <- read.csv("validations-reseau-ferre-nombre-validations-par-jour-1er-semestre.csv", sep=";")
+
 years <- 2018:2023
 semesters <- c("S1", "S2")
 
@@ -44,14 +46,17 @@ for (year in years) {
   if(exists("S2_2022_NB_FER")) {
     colnames(S2_2022_NB_FER)[colnames(S2_2022_NB_FER) == "lda"] <- "ID_REFA_LDA"
   }
+  if(exists("S1_2023_NB_FER")) {
+    colnames(S1_2023_NB_FER)[colnames(S1_2023_NB_FER) == "lda"] <- "ID_REFA_LDA"
+  }
   if (year != 2023) {
-    # Ajouter les données spatiales à chaque variables
     # Annual NB_FER
     S1 <- paste0("S1_", year, "_NB_FER")
     S2 <- paste0("S2_", year, "_NB_FER")
     # Annual PROFIL_FER
     S1_PROFIL_FER <- paste0("S1_", year, "_PROFIL_FER")
     S2_PROFIL_FER <- paste0("S2_", year, "_PROFIL_FER")
+    
     vectorS1 <- get(S1)
     vectorS1$JOUR <- as.Date(vectorS1$JOUR, format = "%d/%m/%Y")
     vectorS2 <- get(S2)
@@ -60,34 +65,34 @@ for (year in years) {
     vectorS2_PROFIL_FER <- get(S2_PROFIL_FER)
     assign(paste0("ANNUAL_NB_FER_", year), rbind(vectorS1, vectorS2))
     assign(paste0("ANNUAL_PROFIL_FER_", year), rbind(vectorS1_PROFIL_FER, vectorS2_PROFIL_FER))
-    
+    rm(vectorS1, vectorS2, vectorS1_PROFIL_FER, vectorS2_PROFIL_FER)
   }
 }
 
 # Rangement des semestres PROFIL_FER dans une liste
-sn_profil_fer_year <- list(S1_2018_PROFIL_FER, S2_2018_PROFIL_FER,
-                           S1_2019_PROFIL_FER, S2_2019_PROFIL_FER,
-                           S1_2020_PROFIL_FER, S2_2020_PROFIL_FER,
-                           S1_2021_PROFIL_FER, S2_2021_PROFIL_FER,
-                           S1_2022_PROFIL_FER, S2_2022_PROFIL_FER)
+#sn_profil_fer_year <- list(S1_2018_PROFIL_FER, S2_2018_PROFIL_FER,
+#                           S1_2019_PROFIL_FER, S2_2019_PROFIL_FER,
+#                           S1_2020_PROFIL_FER, S2_2020_PROFIL_FER,
+#                           S1_2021_PROFIL_FER, S2_2021_PROFIL_FER,
+#                           S1_2022_PROFIL_FER, S2_2022_PROFIL_FER)
 
 # Supression des Valeurs 'ND' dans chaque dataframe PROFIL_FER 
-for (i in seq_along(sn_profil_fer_year)) {
-  sn_profil_fer_year[[i]] = sn_profil_fer_year[[i]] %>% filter(TRNC_HORR_60 != "ND")
-  sn_profil_fer_year[[i]]$pourc_validations <- gsub(",", ".", sn_profil_fer_year[[i]]$pourc_validations)
-  sn_profil_fer_year[[i]]$pourc_validations <- as.numeric(sn_profil_fer_year[[i]]$pourc_validations)
-}
+#for (i in seq_along(sn_profil_fer_year)) {
+#  sn_profil_fer_year[[i]] = sn_profil_fer_year[[i]] %>% filter(TRNC_HORR_60 != "ND")
+#  sn_profil_fer_year[[i]]$pourc_validations <- gsub(",", ".", sn_profil_fer_year[[i]]$pourc_validations)
+#  sn_profil_fer_year[[i]]$pourc_validations <- as.numeric(sn_profil_fer_year[[i]]$pourc_validations)
+#}
 
-S1_2018_PROFIL_FER <- sn_profil_fer_year[[1]]
-S2_2018_PROFIL_FER <- sn_profil_fer_year[[2]]
-S1_2019_PROFIL_FER <- sn_profil_fer_year[[3]]
-S2_2019_PROFIL_FER <- sn_profil_fer_year[[4]]
-S1_2020_PROFIL_FER <- sn_profil_fer_year[[5]]
-S2_2020_PROFIL_FER <- sn_profil_fer_year[[6]]
-S1_2021_PROFIL_FER <- sn_profil_fer_year[[7]]
-S2_2021_PROFIL_FER <- sn_profil_fer_year[[8]]
-S1_2022_PROFIL_FER <- sn_profil_fer_year[[9]]
-S2_2022_PROFIL_FER <- sn_profil_fer_year[[10]]
+#S1_2018_PROFIL_FER <- sn_profil_fer_year[[1]]
+#S2_2018_PROFIL_FER <- sn_profil_fer_year[[2]]
+#S1_2019_PROFIL_FER <- sn_profil_fer_year[[3]]
+#S2_2019_PROFIL_FER <- sn_profil_fer_year[[4]]
+#S1_2020_PROFIL_FER <- sn_profil_fer_year[[5]]
+#S2_2020_PROFIL_FER <- sn_profil_fer_year[[6]]
+#S1_2021_PROFIL_FER <- sn_profil_fer_year[[7]]
+#S2_2021_PROFIL_FER <- sn_profil_fer_year[[8]]
+#S1_2022_PROFIL_FER <- sn_profil_fer_year[[9]]
+#S2_2022_PROFIL_FER <- sn_profil_fer_year[[10]]
 
 
 # Spatial data
@@ -105,9 +110,6 @@ SPATIAL_DATA <- SPATIAL_DATA %>%
 
 for (year in 2018:2022) {
   annual_nb_fer <- get(paste0("ANNUAL_NB_FER_", year))
-  
-  # Jointure des spatial data avec les ANNUAL_NB_FER
-  #annual_nb_fer <- left_join(annual_nb_fer, SPATIAL_DATA, by = c("ID_REFA_LDA" = "ID_REFA_LDA"))
   
   # Changement des données incohérentes dans CATEGORIE_TITRE par 'autre'
   annual_nb_fer <- annual_nb_fer %>%
@@ -144,6 +146,8 @@ for (year in 2018:2022) {
   annual_profil_fer <- annual_profil_fer %>% filter(TRNC_HORR_60 != "ND")
   
   assign(paste0("ANNUAL_PROFIL_FER_", year), annual_profil_fer)
+  
+  rm(annual_nb_fer, annual_profil_fer)
 }
 
 ANNUAL_NB_FER_2018$weekday <- factor(
@@ -161,36 +165,28 @@ years_data_nb <- list(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020
 years_data_profil <- list(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, 
                           ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
 
+S1_2023_NB_FER <- S1_2023_NB_FER  %>%
+  mutate(CATEGORIE_TITRE = recode(CATEGORIE_TITRE,
+                                  "?" = "autre",
+                                  "NON DEFINI" = "autre",
+                                  "AUTRE TITRE" = "autre"))
 
-#for (i in seq_along(years_data_nb)) {
-#  years_data_nb[[i]]$weekday <- weekdays(years_data_nb[[i]]$JOUR)
-#}
+S1_2023_NB_FER$JOUR <- as.Date(S1_2023_NB_FER$JOUR, format = "%Y-%m-%d")
 
-#ANNUAL_NB_FER_2018 = years_data_nb[[1]]
-#ANNUAL_NB_FER_2019 = years_data_nb[[2]]
-#ANNUAL_NB_FER_2020 = years_data_nb[[3]]
-#ANNUAL_NB_FER_2021 = years_data_nb[[4]]
-#ANNUAL_NB_FER_2022 = years_data_nb[[5]]
-#allDataFrameNB <- do.call(rbind, years_data_nb)
+S1_2023_NB_FER$WEEK <- strftime(S1_2023_NB_FER$JOUR, format = "%V")
+S1_2023_NB_FER$WEEK <- as.numeric(S1_2023_NB_FER$WEEK)
 
-#allDataFrameProfile = do.call(rbind, years_data_profil)
+S1_2023_NB_FER$YEAR <- strftime(S1_2023_NB_FER$JOUR, format = "%Y")
+S1_2023_NB_FER$YEAR <- as.numeric(S1_2023_NB_FER$YEAR)
 
-t = left_join(SPATIAL_DATA, ANNUAL_NB_FER_2018, by = c("ID_REFA_LDA" = "ID_REFA_LDA"))
+S1_2023_NB_FER$year_week <- paste0(S1_2023_NB_FER$YEAR, "-W", S1_2023_NB_FER$WEEK)
 
-#categorie_max <- t %>%
-#  group_by(t$CATEGORIE_TITRE) %>%
-#  summarise(total_validation = sum(t$NB_VALD)) %>% head(1)
+S1_2023_NB_FER$weekday <- weekdays(S1_2023_NB_FER$JOUR)
 
-#heure de pointe + pourcentage validations
-horaire_pointe_lognes <- t %>%
-  filter(nom == "Torcy") %>%  # Filtrer les données pour l'arrêt "Lognes"
-  group_by(TRNC_HORR_60) %>%    # Grouper par horaire (ou la colonne horaire souhaitée)
-  summarise(total = sum(pourc_validations)) %>%
-  arrange(desc(total))# Calculer la somme des validations
-#Categorie + utilisé
-categorie <- t %>%
-  filter(nom == "Torcy") %>%  # Filtrer les données pour l'arrêt "Lognes"
-  group_by(CATEGORIE_TITRE) %>%    # Grouper par horaire (ou la colonne horaire souhaitée)
-  summarise(total = sum(NB_VALD)) %>%
-  arrange(desc(total))# Calculer la somme des validations
+S1_2023_NB_FER$year_week <- factor(S1_2023_NB_FER$year_week, levels = unique(S1_2023_NB_FER$year_week))
+
+S1_2023_NB_FER$saison <- sapply(as.Date(S1_2023_NB_FER$JOUR), get_season)
+
+rm(list = ls(pattern = "^(S1|S2)_(2018|2019|2020|2021|2022)_NB_FER$"))
+rm(list = ls(pattern = "^(S1|S2)_(2018|2019|2020|2021|2022)_PROFIL_FER$"))
 
