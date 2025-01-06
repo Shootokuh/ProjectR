@@ -44,7 +44,8 @@ ggplot(dataByDayPerYearLess) +
 
 ################################################################################
 
-dataByWeekYear2018 = ANNUAL_NB_FER_2018 %>% 
+
+dataByWeekYear2019 = ANNUAL_NB_FER_2019 %>% 
   group_by(WEEK) %>% 
   summarize(n=n()) %>%
   arrange(WEEK)
@@ -69,13 +70,13 @@ ggplot(dataByWeekYear2018, aes(x=WEEK,y=n, group = 1)) +
   xlab("Semaines")+ylab("temps")+
   ggtitle("Nombres de validations par semaine sur 2018")
 
-minWeek <- min(dataByWeekYear2018$n)
-minWeek3 <- dataByWeekYear2018 %>%
+minWeek <- min(dataByWeekYear2019$n)
+minWeek3 <- dataByWeekYear2019 %>%
             arrange(desc(n)) %>%
             slice(1:3)
 minWeek3List <- minWeek3 %>% pull(WEEK)
-maxWeek <- max(dataByWeekYear2018$n)
-meanWeek <- mean(dataByWeekYear2018$n)
+maxWeek <- max(dataByWeekYear2019$n)
+meanWeek <- mean(dataByWeekYear2019$n)
 
 ################################################################################
 # DIFFERENCE VACANCES SCOLAIRES / HORS VACANCES SCOLAIRES                      #
@@ -86,47 +87,6 @@ S1_2018_PROFIL_FER$pourc_validations <- as.numeric(S1_2018_PROFIL_FER$pourc_vali
 scolarByWeekPeroid2018 
 taffByWeekPeriod2018
 
-scolarPeriod2018 = ANNUAL_PROFIL_FER_2018 %>% group_by(CAT_JOUR, TRNC_HORR_60) %>% 
-                    filter(CAT_JOUR == 'JOVS' | CAT_JOUR == "SAHV") %>%
-                    summarize(pourc_validations_mean = mean(pourc_validations)) %>%
-                    mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60)))
-
-taffPeriod2018 = ANNUAL_PROFIL_FER_2018 %>% group_by(CAT_JOUR, TRNC_HORR_60) %>% 
-                  filter(CAT_JOUR == 'JOHV' | CAT_JOUR == "SAHV") %>%
-                  summarize(pourc_validations_mean = mean(pourc_validations)) %>%
-                  mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60)))
-                  # À retirer les valeurs dont la TRNC_HORR_60 == "ND"
-                  test = S1_2018_PROFIL_FER %>% filter(TRNC_HORR_60 == "ND")
-
-ggplot() +
-  geom_line(
-    data = scolarPeriod2018, 
-    aes(
-      x = Heure_Val, 
-      y=pourc_validations_mean, 
-      group=1, 
-      color = "Jour Ouvré en Période de Vacances Scolaires")) +
-  geom_line(
-    data = taffPeriod2018, 
-    aes(
-      x = Heure_Val, 
-      y=pourc_validations_mean, 
-      group=1, 
-      color = "Jour Ouvré Hors Vacances Scolaires")) +
-  theme_bw()+
-  xlab("Tranche horaire 1H") + ylab("validations / 100")+
-  scale_x_continuous(
-    breaks = scolarPeriod2018$Heure_Val, 
-    labels = scolarPeriod2018$TRNC_HORR_60
-  ) +
-  scale_color_brewer("Saison",palette ="Spectral")+
-  guides(colour = "legend", size = "legend")+
-  ggtitle("Pourcentage de validations sur l'ensemble du réseau par tranche horaire en 2018")+
-  scale_color_manual(
-    name = "Périodes", # Nom de la légende
-    values = c("Jour Ouvré en Période de Vacances Scolaires" = "blue", 
-               "Jour Ouvré Hors Vacances Scolaires" = "red")
-  )
 
 ################################################################################
 
