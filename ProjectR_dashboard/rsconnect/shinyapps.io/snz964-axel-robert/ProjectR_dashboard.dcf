@@ -5,7 +5,7 @@ account: snz964-axel-robert
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 13668593
-bundleId: 9611072
+bundleId: 9621955
 url: https://snz964-axel-robert.shinyapps.io/ProjectR_dashboard/
 version: 1
 asMultiple: FALSE

@@ -1,20 +1,135 @@
 library(shiny)
 
-library(sf)
+#library(sf)
 library(dplyr)
 library(leaflet)
-library(ggplot2)
-library(lubridate)
-library(patchwork)
-library(gridExtra) 
-library(plotly)
+#library(ggplot2)
+#library(lubridate)
+#library(patchwork)
+#library(gridExtra)
+
 
 allDataFrameNB <- readRDS("allDataFrameNB.RDS")
 allDataFrameProfile <- readRDS("allDataFrameProfile.RDS")
-print(allDataFrameNB)
-print(allDataFrameProfile)
 SPATIAL_DATA <- readRDS("Spatial_Data.RDS")
-SPATIAL_DATA <- st_transform(SPATIAL_DATA, crs = 4326)
+#SPATIAL_DATA <- st_transform(SPATIAL_DATA, crs = 4326)
+
+################################################################################
+# GRAPHES TENDANCES ANNUELLES                                                  #
+################################################################################
+
+# Pré-calculer les données agrégées pour toutes les années
+aggregated_data <- allDataFrameNB %>%
+  group_by(YEAR, WEEK) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  arrange(YEAR, WEEK)
+
+# Calculer les valeurs globales nécessaires (max pour l'échelle)
+max_y_dataPerWeek <- max(aggregated_data$n, na.rm = TRUE)
+
+#  Fonction pour générer un graphique pour une année donnée
+generate_week_plot <- function(data, year, max_y) {
+  #Filtrer les données pour l'année
+  dataPerWeek <- data %>% filter(YEAR == year)
+  
+#  Calculer les seuils (min, max, mean)
+  stats <- dataPerWeek %>%
+    summarise(
+      minWeek = min(n, na.rm = TRUE),
+      maxWeek = max(n, na.rm = TRUE),
+      meanWeek = mean(n, na.rm = TRUE)
+    )
+  
+  seuil <- data.frame(
+    yintercept = c(stats$minWeek, stats$maxWeek, stats$meanWeek),
+    label = c("min", "max", "mean"),
+    color = c("red", "green", "blue")
+  )
+  
+#    Générer le graphique
+  ggplot(dataPerWeek, aes(x = WEEK, y = n, group = 1)) +
+    geom_line() +
+    geom_hline(data = seuil, aes(yintercept = yintercept, color = label),
+               linetype = "dashed", linewidth = 0.8) +
+    theme_minimal() +
+    scale_y_continuous(
+      limits = c(0, max_y),
+      breaks = seq(0, max_y, by = max_y / 10)
+    ) +
+    labs(title = paste("Année :", year)) +
+    scale_color_manual(
+      name = "Seuils",
+      values = setNames(seuil$color, seuil$label)
+    ) +
+    theme(
+      legend.position = "top",
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+    )
+}
+
+################################################################################
+# PLOTS WEEK (Optimisé)                                                        #
+################################################################################
+
+# Pré-calculer les données agrégées pour toutes les années et jours
+dataPerDay <- allDataFrameNB %>%
+  group_by(weekday, YEAR) %>%
+  summarise(nb_valid = mean(NB_VALD, na.rm = TRUE), .groups = "drop") %>%
+  arrange(weekday)
+
+# Calculer la valeur maximale pour l'échelle
+max_y_dataPerDay <- max(dataPerDay$nb_valid, na.rm = TRUE)
+
+# Fonction pour générer un graphique par jour de la semaine
+generate_weekday_plot <- function(data, year, max_y) {
+  data_filtered <- data %>% filter(YEAR == year)
+  
+  ggplot(data_filtered, aes(x = weekday, y = nb_valid, group = 1)) +
+    geom_col(fill = "#0073C2FF") +
+    scale_y_continuous(
+      limits = c(0, max_y),
+      breaks = seq(0, max_y, by = max_y / 10)
+    ) +
+    labs(title = paste("Année :", year)) +
+    theme_minimal() +
+    theme(
+      legend.position = "top",
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      axis.text.x = element_text(angle = -75)
+    )
+}
+
+################################################################################
+# PLOTS SEASON MEAN (Optimisé)                                                 #
+################################################################################
+
+#  Pré-calculer les données agrégées pour toutes les saisons et années
+dataPerSaison <- allDataFrameNB %>%
+  group_by(saison, YEAR) %>%
+  summarise(nb_valid = mean(NB_VALD, na.rm = TRUE), .groups = "drop") %>%
+  arrange(saison)
+
+#  Calculer la valeur maximale pour l'échelle
+max_y_dataPerSaison <- max(dataPerSaison$nb_valid, na.rm = TRUE)
+
+#  Fonction pour générer un graphique par saison
+generate_season_plot <- function(data, year, max_y) {
+  data_filtered <- data %>% filter(YEAR == year)
+  
+  ggplot(data_filtered, aes(x = saison, y = nb_valid)) +
+    geom_col(fill = "#0073C2FF") +
+    scale_y_continuous(
+      limits = c(0, max_y),
+      breaks = seq(0, max_y, by = max_y / 10)
+    ) +
+    labs(title = paste("Année :", year)) +
+    theme_minimal() +
+    theme(
+      legend.position = "top",
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      axis.text.x = element_text(angle = -75)
+    )
+}
 
 ################################################################################
 # fonction                                                                     #
@@ -79,7 +194,7 @@ create_plots_nb_valid <- function(dataRef, dataCompare, period_ref, period_compa
     theme(
       plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.text.x = element_text(angle = -75)
-      )
+    )
   plots_nb_valid <- append(plots_nb_valid, list(p))
   
   p <- ggplot(dataCompare, aes(x=year_month, y=nb_valid, group = 1)) +
@@ -145,10 +260,6 @@ create_plots_categorie_titre <- function(dataRef, dataCompare, period_ref, perio
   
   p <- ggplot(dataRef, aes(x = WEEK, y = nb_valid)) +
     geom_line(aes(color = CATEGORIE_TITRE)) +
-    scale_x_continuous(
-      breaks = dataRef$WEEK[seq(1, length(dataRef$WEEK), by = 3)], # Affiche une semaine sur deux
-      labels = dataRef$WEEK[seq(1, length(dataRef$WEEK), by = 3)]  
-    ) +
     scale_y_continuous(
       limits = c(0, max_y_plots_categorie_titre),
       breaks = seq(0, max_y_plots_categorie_titre, by = max_y_plots_categorie_titre / 10) 
@@ -258,14 +369,14 @@ generate_HV_VS <- function(data) {
       scale_color_brewer("Saison",palette ="Spectral")+
       guides(colour = "legend", size = "legend")+
       scale_color_manual(
-        name = "Périodes", # Nom de la légende
+        name = "Périodes",
         values = c("Jour Ouvré en Période de Vacances Scolaires" = "blue", 
                    "Jour Ouvré Hors Vacances Scolaires" = "red")
       ) +
       theme_minimal() +
       theme(
-        legend.position = "bottom", # Légende en bas
-        axis.text.x = element_text(angle = 45, hjust = 1)  # Rotation des labels de l'axe X
+        legend.position = "bottom", #  Légende en bas
+        axis.text.x = element_text(angle = 45, hjust = 1) #  Rotation des labels de l'axe X
       )
     plots_HV_VS <- append(plots_HV_VS, list(p))
   }
@@ -306,18 +417,16 @@ generate_Jour <- function(data) {
       theme(
         legend.position = "bottom", # Légende en bas
         plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-        axis.text.x = element_text(angle = -90, hjust = 1)  # Rotation des labels de l'axe X
+        axis.text.x = element_text(angle = -90, hjust = 1)   # Rotation des labels de l'axe X
       )
     plots_Jour <- append(plots_Jour, list(p))
   }
   return(plots_Jour)
 }
 
-
 ui <- fluidPage(
   # Titre principal au-dessus de la barre
   titlePanel("Fréquentation Réseau ferré - Île-de-France"),
-  
   navbarPage(
     title = NULL,
     tabPanel("Tendances par arrêt",
@@ -431,257 +540,142 @@ ui <- fluidPage(
   )
 )
 
-
-# Serveur
+#  Serveur
 server <- function(input, output) {
-  filtered_data <- reactive({
-    type_arret_select <- input$type_arret
-    dep_select <- input$dep
-    
-    filtered <- SPATIAL_DATA %>% filter(substr(SPATIAL_DATA$commune, 1, 2) == dep_select)
-    final_data <- filtered %>% filter(filtered$type_arret == type_arret_select)
-    
-    return(final_data)
-  })
+################################################################################
+# Filtrage des données reactives                                               #
+################################################################################
+   filtered_data <- reactive({
+     dep_select <- input$dep
+     type_arret_select <- input$type_arret
+     
+     SPATIAL_DATA %>%
+       filter(substr(commune, 1, 2) == dep_select, type_arret == type_arret_select)
+   })
   
-  click_data <- reactive({
+################################################################################
+# Gestion des données après clic sur la carte                                  #
+################################################################################
+   click_data <- reactive({
+     click <- input$map_shape_click
+     if (is.null(click)) return(NULL)
     
-    click <- input$map_shape_click
-    if (is.null(click)) return(NULL)
+     id_refa_click <- SPATIAL_DATA %>%
+       filter(nom == click$id) %>%
+       pull(ID_REFA_LDA)
     
-    spatial_data_filtered <- SPATIAL_DATA %>% filter(nom == click$id)
-    id_refa_click <- spatial_data_filtered %>% select(ID_REFA_LDA) %>% pull(ID_REFA_LDA)
-    dataProfile <- allDataFrameProfile %>% filter(ID_REFA_LDA == id_refa_click)
-    dataNB <- allDataFrameNB %>% filter(ID_REFA_LDA == id_refa_click)
+     dataProfile <- allDataFrameProfile %>% filter(ID_REFA_LDA == id_refa_click)
+     dataNB <- allDataFrameNB %>% filter(ID_REFA_LDA == id_refa_click)
     
-    heure_pointe <- dataProfile %>%
-      group_by(TRNC_HORR_60) %>%
-      summarise(total = sum(pourc_validations)) %>%
-      arrange(desc(total)) %>%
-      head(1)
+     heure_pointe <- dataProfile %>%
+       group_by(TRNC_HORR_60) %>%
+       summarise(total = sum(pourc_validations), .groups = "drop") %>%
+       slice_max(total, n = 1)
     
-    categorie_dominante <- dataNB %>%
-      group_by(CATEGORIE_TITRE) %>%
-      summarise(total = sum(NB_VALD)) %>%
-      arrange(desc(total)) %>%
-      head(1)
+     categorie_dominante <- dataNB %>%
+       group_by(CATEGORIE_TITRE) %>%
+       summarise(total = sum(NB_VALD), .groups = "drop") %>%
+       slice_max(total, n = 1)
     
-    valid_mean <- dataNB %>% summarise(nb_valid = mean(NB_VALD))
+     valid_mean <- dataNB %>% summarise(nb_valid = mean(NB_VALD, na.rm = TRUE))
     
-    output$gridPlotHV_VS <- renderPlot({
-      wrap_plots(generate_HV_VS(dataProfile), ncol = 3, nrow = 2)
+     output$gridPlotHV_VS <- renderPlot({
+       wrap_plots(generate_HV_VS(dataProfile), ncol = 3, nrow = 2)
+     })
+    
+     output$gridPlotJour <- renderPlot({
+       wrap_plots(generate_Jour(dataProfile), ncol = 2, nrow = 2)
+     })
+    
+     list(
+       heure_pointe = heure_pointe,
+       categorie_dominante = categorie_dominante,
+       click_id = click$id,
+       valid_mean = valid_mean
+     )
+   })
+  
+################################################################################
+# Affichage de la carte Leaflet                                                #
+################################################################################
+   output$map <- renderLeaflet({
+     data <- filtered_data()
+    
+     if (nrow(data) == 0) {
+       leaflet() %>%
+         addTiles() %>%
+         addPopups(
+           lng = 2.3522, lat = 48.8566,
+           popup = "Aucun arrêt de ce type dans ce département"
+         )
+     } else {
+       leaflet(data) %>%
+         addTiles() %>%
+         addPolygons(
+           weight = 4,
+           color = "blue",
+           label = data$nom,
+           layerId = data$nom
+         )
+     }
+   })
+  
+################################################################################
+# Affichage des informations après clic                                        #
+################################################################################
+   output$click_info <- renderText({
+     click_info <- click_data()
+     
+     if (is.null(click_info)) return("Cliquez sur un élément de la carte.")
+     
+     paste(
+       "Vous avez cliqué sur :", click_info$click_id,
+       "\nHeure de pointe :", click_info$heure_pointe$TRNC_HORR_60,
+       "\nCatégorie dominante :", click_info$categorie_dominante$CATEGORIE_TITRE,
+       "\nNombre de validations moyen :", click_info$valid_mean$nb_valid
+     )
+   })
+  
+################################################################################
+# Observers pour les graphes (Optimisé)                                        #
+################################################################################
+  
+  # Fonction générique pour gérer la logique des graphes
+  render_graph <- function(graph_id, data_function, plot_function) {
+    observeEvent(input[[graph_id]], {
+      output$graph_ref <- renderPlot({
+        dataRef <- data_function(input$period_ref)
+        dataCompare <- data_function(input$period_compare)
+        plots_list <- plot_function(dataRef, dataCompare, input$period_ref, input$period_compare)
+        
+        wrap_plots(plots_list, ncol = 2, nrow = 1)
+      })
     })
-    
-    output$gridPlotJour <- renderPlot({
-      wrap_plots(generate_Jour(dataProfile), ncol = 2, nrow = 2)
-    })
-    
-    return(list(heure_pointe = heure_pointe, categorie_dominante = categorie_dominante, click_id = click$id, valid_mean = valid_mean))
-  })
-  
-  output$map = renderLeaflet({
-    
-    data = filtered_data()
-    
-    if (nrow(data) == 0) {
-      leaflet() %>%
-        addTiles() %>%
-        addPopups(
-          lng = 2.3522, lat = 48.8566,
-          popup = "Aucun arrêt de ce type dans ce département"
-        )
-    }
-    else {
-      leaflet(data) %>%
-        addTiles() %>%
-        addPolygons(
-          weight = 4,
-          color = "blue",
-          label = data$nom,
-          layerId = data$nom
-          
-        )
-    }
-    
-  })
-  
-  output$click_info <- renderText({
-    click_info <- click_data()
-    
-    if (is.null(click_info)) return("Cliquez sur un élément de la carte.")
-    
-    message <- paste("Vous avez cliqué sur : ", click_info$click_id,
-                     "\n Heure de pointe : ", click_info$heure_pointe$TRNC_HORR_60,
-                     "\n Catégorie dominante : ", click_info$categorie_dominante$CATEGORIE_TITRE,
-                     "\nNombre de validations moyenne : ", click_info$valid_mean)
-    return(message)
-  })
-  
-  observeEvent(input$graph_1, {
-    print(input$period_compare)
-    output$graph_ref <- renderPlot({
-      dataRef <- generate_nb_valid_period(input$period_ref)
-      dataCompare <- generate_nb_valid_period(input$period_compare)
-      plots_list <- create_plots_nb_valid(dataRef, dataCompare, input$period_ref, input$period_compare)
-      
-      wrap_plots(plots_list, ncol = 2, nrow = 1)
-    })
-  })
-  
-  observeEvent(input$graph_2, {
-    output$graph_ref <- renderPlot({
-      dataRef <- generate_nb_valid_day_period(input$period_ref)
-      dataCompare <- generate_nb_valid_day_period(input$period_compare)
-      plots_list <- create_plots_nb_valid_day(dataRef, dataCompare, input$period_ref, input$period_compare)
-      
-      wrap_plots(plots_list, ncol = 2, nrow = 1)
-    })
-  })
-  
-  observeEvent(input$graph_3, {
-    output$graph_ref <-renderPlot({
-      
-      dataRef <- generate_categorie_titre_period(input$period_ref)
-      dataCompare <- generate_categorie_titre_period(input$period_compare)
-      plots_list <- create_plots_categorie_titre(dataRef, dataCompare, input$period_ref, input$period_compare)
-      
-      wrap_plots(plots_list, ncol = 2, nrow = 1)
-    })
-  })
-  
-  observeEvent(input$graph_4, {
-    output$graph_ref <-renderPlot({
-      
-      dataRef <- generate_nb_valid_season(input$period_ref)
-      dataCompare <- generate_nb_valid_season(input$period_compare)
-      plots_list <- create_plots_nb_valid_season(dataRef, dataCompare, input$period_ref, input$period_compare)
-      
-      wrap_plots(plots_list, ncol = 2, nrow = 1)
-    })
-  })
-  
-  ################################################################################
-  # PLOS VALID WEEK                                                              #
-  ################################################################################
-  
-  max_y_dataPerWeek = max(allDataFrameNB %>% 
-                            group_by(WEEK, YEAR) %>% 
-                            summarise(n = n()) %>% 
-                            pull(n), na.rm = TRUE)
-  
-  plots_valid_week <- list()
-  for (year in 2018:2023) {
-    dataPerWeek <- allDataFrameNB %>% filter(YEAR == year) %>% 
-      group_by(WEEK) %>% 
-      summarise(n=n()) %>% 
-      arrange(WEEK)
-    
-    minWeek <- min(dataPerWeek$n, na.rm = TRUE)
-    maxWeek <- max(dataPerWeek$n, na.rm = TRUE)
-    meanWeek <- mean(dataPerWeek$n, na.rm = TRUE)
-    
-    seuil <- data.frame(
-      yintercept = c(minWeek, maxWeek, meanWeek),
-      label = c("min", "max", "mean"),
-      color = c("red", "green", "blue")
-    )
-    
-    p <- ggplot(dataPerWeek, aes(x=WEEK,y=n, group = 1)) +
-      geom_line() +
-      geom_hline(data = seuil, aes(yintercept = yintercept, color = label), linetype = "dashed", linewidth = 0.8) +
-      theme_minimal() +
-      scale_y_continuous(
-        limits = c(0, max_y_dataPerWeek),
-        breaks = seq(0, max_y_dataPerWeek, by = max_y_dataPerWeek / 10) 
-      ) + 
-      labs(
-        title = paste("Année :", year)
-      ) +
-      scale_color_manual(
-        name = "Seuils",
-        values = setNames(seuil$color, seuil$label)
-      ) +
-      theme(
-        legend.position = "top",
-        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
-      ) 
-    plots_valid_week <- append(plots_valid_week, list(p))
   }
   
-  output$gridPlot <- renderPlot({
-    wrap_plots(plots_valid_week, ncol = 6, nrow = 1)
-  })  
-  
-  ################################################################################
-  # PLOTS WEEK.                                                                  #
-  ################################################################################
-  
-  dataPerDay <- allDataFrameNB %>% group_by(weekday, YEAR) %>% summarise(nb_valid = mean(NB_VALD), .groups = "drop")
-  dataPerDay <- dataPerDay[order(dataPerDay$weekday), ]
-  
-  max_y_dataPerDay <- max(dataPerDay$nb_valid, na.rm = TRUE)
-  
-  plots_week <- list()
-  for (year in 2018:2023) {
-    data_filtered <- dataPerDay %>% filter(YEAR == year)
-    
-    p <- ggplot(data_filtered, aes(x=weekday, y=nb_valid, group = 1)) +
-      geom_col(fill = "#0073C2FF") + 
-      scale_y_continuous( 
-        limits = c(0, max_y_dataPerDay),
-        breaks = seq(0, max_y_dataPerDay, by = max_y_dataPerDay / 10) 
-      ) +
-      labs(
-        title = paste("Année :", year)
-      ) +
-      theme_minimal() +  
-      theme(
-        legend.position = "top",
-        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-        axis.text.x = element_text(angle = -75)
-      )
-    plots_week <- append(plots_week, list(p))
+  #  Définition des observers pour chaque graphe
+  render_graph("graph_1", generate_nb_valid_period, create_plots_nb_valid)
+  render_graph("graph_2", generate_nb_valid_day_period, create_plots_nb_valid_day)
+  render_graph("graph_3", generate_categorie_titre_period, create_plots_categorie_titre)
+  render_graph("graph_4", generate_nb_valid_season, create_plots_nb_valid_season)
+
+################################################################################
+# Rendu des Graphiques par Année                                               #
+################################################################################
+  render_yearly_plots <- function(data, max_y, plot_function, output_id, ncol = 6, nrow = 1) {
+    plots <- lapply(unique(data$YEAR), function(year) {
+      plot_function(data, year, max_y)
+    })
+    output[[output_id]] <- renderPlot({
+      wrap_plots(plots, ncol = ncol, nrow = nrow)
+    })
   }
   
-  output$gridPlotWeekMean <- renderPlot({
-    wrap_plots(plots_week, ncol = 6, nrow = 1)
-  })
-  
-  ################################################################################
-  # PLOTS SEASON MEAN                                                            #
-  ################################################################################
-  
-  max_y_dataPerSaison <- max(allDataFrameNB %>% group_by(saison, YEAR) %>% 
-                               summarise(n=mean(NB_VALD)) %>% 
-                               pull(n), na.rm = TRUE)
-  
-  plots_season_mean <- list()
-  for (year in 2018:2023) {
-    dataPerSaison <- allDataFrameNB %>% filter(YEAR == year) %>% group_by(saison) %>% summarise(nb_valid = mean(NB_VALD))
-    
-    p <- ggplot(dataPerSaison, aes(x=saison, y=nb_valid)) +
-      geom_col(fill = "#0073C2FF") +
-      scale_y_continuous(
-        limits = c(0, max_y_dataPerSaison),
-        breaks = seq(0, max_y_dataPerSaison, by = max_y_dataPerSaison / 10) 
-      ) + 
-      labs(
-        title = paste("Année :", year)
-      ) +
-      theme_minimal() +
-      theme(
-        legend.position = "top",
-        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-        axis.text.x = element_text(angle = -75)
-      ) 
-    plots_season_mean <- append(plots_season_mean, list(p))
-  }
-  
-  output$gridPlotSeasonMean <- renderPlot({
-    wrap_plots(plots_season_mean, ncol = 6, nrow = 1)
-  })
+  render_yearly_plots(aggregated_data, max_y_dataPerWeek, generate_week_plot, "gridPlot")
+  render_yearly_plots(dataPerDay, max_y_dataPerDay, generate_weekday_plot, "gridPlotWeekMean")
+  render_yearly_plots(dataPerSaison, max_y_dataPerSaison, generate_season_plot, "gridPlotSeasonMean")
   
 }
 
-# Lancer l'application Shiny
+#  Lancer l'application Shiny
 shinyApp(ui = ui, server = server)

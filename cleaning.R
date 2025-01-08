@@ -226,3 +226,6 @@ allDataFrameNB = rbind(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_202
 
 allDataFrameProfile = rbind(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
 
+saveRDS(allDataFrameNB, "ProjectR_dashboard/allDataFrameNB.RDS", compress = TRUE)
+saveRDS(allDataFrameProfile, "ProjectR_dashboard/allDataFrameProfile.RDS", compress = TRUE)
+saveRDS(SPATIAL_DATA, "ProjectR_dashboard/Spatial_Data.RDS", compress = TRUE)
