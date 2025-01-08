@@ -1,6 +1,11 @@
 library(shiny)
 library(dplyr)
 library(leaflet)
+library(sf)
+library(ggplot2)
+library(patchwork)
+
+
 
 
 

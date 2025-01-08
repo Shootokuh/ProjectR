@@ -22,6 +22,7 @@ library(dplyr)
 library(leaflet)
 library(ggplot2)
 library(lubridate)
+library(patchwork)
 ```
 
 We use data from the STIF open data portal. For our data, we have chosen to group the first semester S1 and the second semester into a dataframe, for nb_fer and profil_fer for each year. We renamed the "lda" columns to "ID_REFA_LDA" for the years 2022 and 2023 to maintain consistency with the other years, and we converted the "JOUR" column to the Date format for the NB_FER data
