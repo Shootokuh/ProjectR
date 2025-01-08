@@ -18,18 +18,18 @@ SPATIAL_DATA <- readRDS("Spatial_Data.RDS")
 # GRAPHES TENDANCES ANNUELLES                                                  #
 ################################################################################
 
-# Pré-calculer les données agrégées pour toutes les années
+# Pré-calculer les données par années
 aggregated_data <- allDataFrameNB %>%
   group_by(YEAR, WEEK) %>%
   summarise(n = n(), .groups = "drop") %>%
   arrange(YEAR, WEEK)
 
-# Calculer les valeurs globales nécessaires (max pour l'échelle)
+# Calculer le max Y pour l'échelle
 max_y_dataPerWeek <- max(aggregated_data$n, na.rm = TRUE)
 
 #  Fonction pour générer un graphique pour une année donnée
 generate_week_plot <- function(data, year, max_y) {
-  #Filtrer les données pour l'année
+  
   dataPerWeek <- data %>% filter(YEAR == year)
   
 #  Calculer les seuils (min, max, mean)
@@ -46,7 +46,6 @@ generate_week_plot <- function(data, year, max_y) {
     color = c("red", "green", "blue")
   )
   
-#    Générer le graphique
   ggplot(dataPerWeek, aes(x = WEEK, y = n, group = 1)) +
     geom_line() +
     geom_hline(data = seuil, aes(yintercept = yintercept, color = label),
@@ -68,19 +67,17 @@ generate_week_plot <- function(data, year, max_y) {
 }
 
 ################################################################################
-# PLOTS WEEK (Optimisé)                                                        #
+# PLOTS WEEK.                                                                  #
 ################################################################################
 
-# Pré-calculer les données agrégées pour toutes les années et jours
 dataPerDay <- allDataFrameNB %>%
   group_by(weekday, YEAR) %>%
   summarise(nb_valid = mean(NB_VALD, na.rm = TRUE), .groups = "drop") %>%
   arrange(weekday)
 
-# Calculer la valeur maximale pour l'échelle
+
 max_y_dataPerDay <- max(dataPerDay$nb_valid, na.rm = TRUE)
 
-# Fonction pour générer un graphique par jour de la semaine
 generate_weekday_plot <- function(data, year, max_y) {
   data_filtered <- data %>% filter(YEAR == year)
   
@@ -100,19 +97,16 @@ generate_weekday_plot <- function(data, year, max_y) {
 }
 
 ################################################################################
-# PLOTS SEASON MEAN (Optimisé)                                                 #
+# PLOTS SEASON MEAN                                                            #
 ################################################################################
 
-#  Pré-calculer les données agrégées pour toutes les saisons et années
 dataPerSaison <- allDataFrameNB %>%
   group_by(saison, YEAR) %>%
   summarise(nb_valid = mean(NB_VALD, na.rm = TRUE), .groups = "drop") %>%
   arrange(saison)
 
-#  Calculer la valeur maximale pour l'échelle
 max_y_dataPerSaison <- max(dataPerSaison$nb_valid, na.rm = TRUE)
 
-#  Fonction pour générer un graphique par saison
 generate_season_plot <- function(data, year, max_y) {
   data_filtered <- data %>% filter(YEAR == year)
   
@@ -637,10 +631,9 @@ server <- function(input, output) {
    })
   
 ################################################################################
-# Observers pour les graphes (Optimisé)                                        #
+# Graphes à comparer                                                           #
 ################################################################################
   
-  # Fonction générique pour gérer la logique des graphes
   render_graph <- function(graph_id, data_function, plot_function) {
     observeEvent(input[[graph_id]], {
       output$graph_ref <- renderPlot({
@@ -660,7 +653,7 @@ server <- function(input, output) {
   render_graph("graph_4", generate_nb_valid_season, create_plots_nb_valid_season)
 
 ################################################################################
-# Rendu des Graphiques par Année                                               #
+# Graphiques tendance annuelles                                                #
 ################################################################################
   render_yearly_plots <- function(data, max_y, plot_function, output_id, ncol = 6, nrow = 1) {
     plots <- lapply(unique(data$YEAR), function(year) {
