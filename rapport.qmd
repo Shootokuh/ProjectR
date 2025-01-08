@@ -1,0 +1,1042 @@
+---
+title: "Analyzing and Visualizing Ridership Patterns in Île-de-France Rail Network"
+format: pdf
+editor: visual
+authors : ROBERT Axel, SUN Maxime, KY Christian, GIL Adlane
+group : M2 SSIO, M2 SIA
+---
+
+## Introduction
+
+In this project, we will explore the attendance data for Île-de-France railway stations over the period 2018-2023. The main objective of the project is to analyze and visualize attendance patterns with the implementation of an interactive dashboard allowing stakeholders to monitor and compare different data.
+
+## 1. Data Collection and Cleaning
+
+For this project, we will use several libraries which are listed below.
+
+```{r}
+library(shiny)
+library(readr)
+library(sf)
+library(dplyr)
+library(leaflet)
+library(ggplot2)
+library(lubridate)
+```
+
+We use data from the STIF open data portal. For our data, we have chosen to group the first semester S1 and the second semester into a dataframe, for nb_fer and profil_fer for each year. We renamed the "lda" columns to "ID_REFA_LDA" for the years 2022 and 2023 to maintain consistency with the other years, and we converted the "JOUR" column to the Date format for the NB_FER data
+
+```{r}
+years <- 2018:2023
+semesters <- c("S1", "S2")
+for (year in years) {
+  for (semester in semesters) {
+    delimiter <- ifelse(year == "2022" & semester == "S2", ";", "\t")
+    nb_fer_file <- paste0("data-rf-", year, "/", year, "_", semester, "_NB_FER.txt")
+    profil_fer_file <- paste0("data-rf-", year, "/", year, "_", semester, "_PROFIL_FER.txt")
+    if (file.exists(nb_fer_file)) {
+      assign(paste0(semester, "_", year, "_NB_FER"), read_delim(nb_fer_file, delim = delimiter))
+    }
+    if (file.exists(profil_fer_file)) {
+      assign(paste0(semester, "_", year, "_PROFIL_FER"), read_delim(profil_fer_file, delim = delimiter))
+    }
+  }
+  if(exists("S2_2022_PROFIL_FER")) {
+    colnames(S2_2022_PROFIL_FER)[colnames(S2_2022_PROFIL_FER) == "lda"] <- "ID_REFA_LDA"
+  }
+  if(exists("S2_2022_NB_FER")) {
+    colnames(S2_2022_NB_FER)[colnames(S2_2022_NB_FER) == "lda"] <- "ID_REFA_LDA"
+  }
+  if(exists("S1_2023_NB_FER")) {
+    colnames(S1_2023_NB_FER)[colnames(S1_2023_NB_FER) == "lda"] <- "ID_REFA_LDA"
+  }
+  if (year != 2023) {
+    S1 <- paste0("S1_", year, "_NB_FER")
+    S2 <- paste0("S2_", year, "_NB_FER")
+    
+    S1_PROFIL_FER <- paste0("S1_", year, "_PROFIL_FER")
+    S2_PROFIL_FER <- paste0("S2_", year, "_PROFIL_FER")
+    
+   
+    vectorS1 <- get(S1)
+    vectorS1$JOUR <- as.Date(vectorS1$JOUR, format = "%d/%m/%Y")
+    vectorS2 <- get(S2)
+    vectorS2$JOUR <- as.Date(vectorS2$JOUR, format = "%d/%m/%Y")
+    
+    
+    vectorS1_PROFIL_FER <- get(S1_PROFIL_FER)
+    vectorS2_PROFIL_FER <- get(S2_PROFIL_FER)
+
+    assign(paste0("ANNUAL_NB_FER_", year), rbind(vectorS1, vectorS2))
+    assign(paste0("ANNUAL_PROFIL_FER_", year), rbind(vectorS1_PROFIL_FER, vectorS2_PROFIL_FER))
+
+    rm(vectorS1, vectorS2, vectorS1_PROFIL_FER, vectorS2_PROFIL_FER)
+  }
+}
+```
+
+Spatial data storage in the SPATIAL_DATA dataframe. Coordinates in SPATIAL_DATA were initialized using the Lambert-93 projection, a commonly used system for the Île-de-France region.
+
+```{r}
+ile_de_france_departments <- c("75", "77", "78", "91", "92", "93", "94", "95")
+
+SPATIAL_DATA = st_read("REF_ZdA/PL_ZDL_R_17_12_2024.shp", crs=2154)
+
+colnames(SPATIAL_DATA)[colnames(SPATIAL_DATA) == "idrefa_lda"] <- "ID_REFA_LDA"
+
+SPATIAL_DATA <- SPATIAL_DATA %>%
+  filter(substr(commune, 1, 2) %in% ile_de_france_departments)
+```
+
+The code below processes data for each year from 2018 to 2022 by cleaning and transforming the ANNUAL_NB_FER and ANNUAL_PROFIL_FER dataframes. It trims whitespace, recodes inconsistent values, extracts week and year information, and assigns season data. Additionally, it cleans the pourc_validations column and filters out invalid rows in ANNUAL_PROFIL_FER. After processing, the data is saved back to its respective variable, and unnecessary dataframes are removed from memory.
+
+```{r}
+
+get_season <- function(date) {
+  month <- as.numeric(format(date, "%m"))
+  day <- as.numeric(format(date, "%d"))
+  
+  if ((month == 12 && day >= 21) || month %in% c(1, 2) || (month == 3 && day < 21)) {
+    return("Hiver")
+  } else if ((month == 3 && day >= 21) || month %in% c(4, 5) || (month == 6 && day < 21)) {
+    return("Printemps")
+  } else if ((month == 6 && day >= 21) || month %in% c(7, 8) || (month == 9 && day < 21)) {
+    return("Été")
+  } else {
+    return("Automne")
+  }
+}
+
+for (year in 2018:2022) {
+  
+  # Début du traitement pour les data de la forme ANNUAL_NB_FER_ANNEE
+  annual_nb_fer <- get(paste0("ANNUAL_NB_FER_", year))
+  
+  # Suppression des espaces blancs dans la colonne LIBELLE_ARRET
+  annual_nb_fer <- annual_nb_fer %>%
+    mutate(LIBELLE_ARRET = trimws(LIBELLE_ARRET))
+  
+  # Changement des données incohérentes dans CATEGORIE_TITRE par 'autre'
+  # afin d'obtenir un ensemble de données cohérent
+  annual_nb_fer <- annual_nb_fer %>%
+    mutate(CATEGORIE_TITRE = recode(CATEGORIE_TITRE,
+                                    "?" = "autre",
+                                    "NON DEFINI" = "autre",
+                                    "AUTRE TITRE" = "autre"))
+  
+  # Ajout d'une colonne WEEK de type numérique 
+  # afin d'obtenir le numéro de la semaine de l'année pour chaque ligne
+  annual_nb_fer$WEEK <- strftime(annual_nb_fer$JOUR, format = "%V")
+  annual_nb_fer$WEEK <- as.numeric(annual_nb_fer$WEEK)
+  
+  # Ajout d'une colonne YEAR dans chaque data ANNUAL_NB_FER_ANNEE
+  annual_nb_fer$YEAR <- strftime(annual_nb_fer$JOUR, format = "%Y")
+  annual_nb_fer$YEAR <- as.numeric(annual_nb_fer$YEAR)
+  
+  # Ajout d'une colonne year_week qui combine la colonne YEAR et WEEK
+  annual_nb_fer$year_week <- paste0(annual_nb_fer$YEAR, "-W", annual_nb_fer$WEEK)
+  
+  # Ajout d'une colonne weekday qui contient le nom du jour de la semaine
+  # pour chaque date dans la colonne JOUR
+  annual_nb_fer$weekday <- weekdays(annual_nb_fer$JOUR)
+  annual_nb_fer$weekday <- factor(
+    annual_nb_fer$weekday,
+    levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+  )
+  # Transformation de la colonne year_week en un facteur où les niveaux sont définis
+  # par les valeurs uniques présentes dans la colonne 
+  annual_nb_fer$year_week <- factor(annual_nb_fer$year_week, levels = unique(annual_nb_fer$year_week))
+  
+  # Ajout d'une colonne saison qui applique la fonction get_season à chaque date 
+  # afin de déterminer la saison
+  season_order <- c("Printemps", "Été", "Automne", "Hiver")
+  annual_nb_fer$saison <- sapply(as.Date(annual_nb_fer$JOUR), get_season)
+  annual_nb_fer$saison <- factor(annual_nb_fer$saison, levels = season_order)
+  assign(paste0("ANNUAL_NB_FER_", year), annual_nb_fer)
+  
+  
+  # Début du traitement pour les data de la forme ANNUAL_PROFIL_FER_ANNEE
+  annual_profil_fer <- get(paste0("ANNUAL_PROFIL_FER_", year))
+  
+  annual_profil_fer <- annual_profil_fer %>%
+    mutate(LIBELLE_ARRET = trimws(LIBELLE_ARRET))
+  
+  # Remplacement des virgules et conversion en numérique des valeurs pourc_validations
+  annual_profil_fer$pourc_validations <- gsub(",", ".", annual_profil_fer$pourc_validations)
+  annual_profil_fer$pourc_validations <- as.numeric(annual_profil_fer$pourc_validations)
+  
+  # Suppression des valeurs 'ND' 
+  annual_profil_fer <- annual_profil_fer %>% filter(TRNC_HORR_60 != "ND")
+  
+  # Ajout d'une colonne YEAR dans chaque data ANNUAL_PROFIL_FER_ANNEE
+  annual_profil_fer$YEAR <- year
+  
+  
+  assign(paste0("ANNUAL_PROFIL_FER_", year), annual_profil_fer)
+  
+  # Suppression des data inutilisées
+  rm(annual_nb_fer, annual_profil_fer)
+}
+  
+```
+
+The processing of the weekday column for the year 2018 should be done after the loop to avoid inconsistencies and missing values.
+
+```{r}
+ANNUAL_NB_FER_2018$weekday <- factor(
+  ANNUAL_NB_FER_2018$weekday,
+  levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+)
+
+ANNUAL_NB_FER_2018$weekday = weekdays(ANNUAL_NB_FER_2018$JOUR)
+```
+
+Given that the file containing the NB_FER data for the S1 2023 semester has a different format from the other files, the processing is done outside the loop, specifically for 2023.
+
+```{r}
+
+S1_2023_NB_FER <- read.csv("validations-reseau-ferre-nombre-validations-par-jour-1er-semestre.csv", sep=";")
+
+ colnames(S1_2023_NB_FER)[colnames(S1_2023_NB_FER) == "lda"] <- "ID_REFA_LDA"
+
+S1_2023_NB_FER <- S1_2023_NB_FER  %>%
+  mutate(CATEGORIE_TITRE = recode(CATEGORIE_TITRE,
+                                  "?" = "autre",
+                                  "NON DEFINI" = "autre",
+                                  "AUTRE TITRE" = "autre"))
+
+S1_2023_NB_FER <- S1_2023_NB_FER %>%
+  mutate(LIBELLE_ARRET = trimws(LIBELLE_ARRET))
+
+S1_2023_NB_FER$JOUR <- as.Date(S1_2023_NB_FER$JOUR, format = "%Y-%m-%d")
+
+S1_2023_NB_FER$WEEK <- strftime(S1_2023_NB_FER$JOUR, format = "%V")
+S1_2023_NB_FER$WEEK <- as.numeric(S1_2023_NB_FER$WEEK)
+
+S1_2023_NB_FER$YEAR <- strftime(S1_2023_NB_FER$JOUR, format = "%Y")
+S1_2023_NB_FER$YEAR <- as.numeric(S1_2023_NB_FER$YEAR)
+
+S1_2023_NB_FER$year_week <- paste0(S1_2023_NB_FER$YEAR, "-W", S1_2023_NB_FER$WEEK)
+
+S1_2023_NB_FER$weekday <- weekdays(S1_2023_NB_FER$JOUR)
+
+S1_2023_NB_FER$year_week <- factor(S1_2023_NB_FER$year_week, levels = unique(S1_2023_NB_FER$year_week))
+
+S1_2023_NB_FER$saison <- sapply(as.Date(S1_2023_NB_FER$JOUR), get_season)
+```
+
+### Visualising data
+
+```{r}
+
+View(ANNUAL_NB_FER_2018)
+View(ANNUAL_NB_FER_2019)
+View(ANNUAL_NB_FER_2020)
+View(ANNUAL_NB_FER_2021)
+View(ANNUAL_NB_FER_2022)
+View(S1_2023_NB_FER)
+
+View(ANNUAL_PROFIL_FER_2018)
+View(ANNUAL_PROFIL_FER_2019)
+View(ANNUAL_PROFIL_FER_2020)
+View(ANNUAL_PROFIL_FER_2021)
+View(ANNUAL_PROFIL_FER_2022)
+
+```
+
+### Combine Dataset
+
+We have decided to combine the annual data frames into a single data frame because we believe it is more advantageous for filtering and other queries.
+
+```{r}
+allDataFrameNB = rbind(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020, ANNUAL_NB_FER_2021, ANNUAL_NB_FER_2022, S1_2023_NB_FER)
+
+allDataFrameProfile = rbind(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
+
+
+```
+
+### Dataset description
+
+#### NB_FER dataset
+
+It represents a record of the number of validations, referring to the station and the transport pass used.
+
+-   **JOUR** : date when the data entry is recorded
+
+-   **CODE_STIF_TRNS**: Stif code of the carrier
+
+-   **CODE_STIF_RES**: Stif code of the network
+
+-   **CODE_STIF_ARRET**: Stif code of the stop/station
+
+-   **LIBELLE_ARRET**: Label of the stop/station
+
+-   **ID_REFA_LDA** : Station zone code
+
+-   **CATEGORIE_TITRE** : The type of passport used to travel
+
+-   **NB_VALD** : The number of passeport's validations
+
+-   **WEEK** : The annual week number
+
+-   **YEAR** : The year which the data was collected
+
+-   **year_week** : Combines the year and the week number into a single identifier
+
+-   **weekday** : The day of the week based on the date
+
+-   **saison** : The season
+
+#### PROFIL_FER dataset
+
+It presents the hourly profiles of passenger validations for a typical day, broken down by stop on the rail network.
+
+-   **CODE_STIF_TRNS**: Stif code of the carrier
+
+-   **CODE_STIF_RES**: Stif code of the network
+
+-   **CODE_STIF_ARRET**: Stif code of the stop/station
+
+-   **LIBELLE_ARRET**: Label of the stop/station
+
+-   **ID_REFA_LDA** : Station zone code
+
+-   **CAT_JOUR**: Category of the day : The calculations are carried out on all the data for the semester according to their category:
+
+    -   1\. JOHV: Working day excluding school holidays
+
+    -   2\. SAHV: Saturday outside school holidays
+
+    -   3\. JOVS: Working Day during School Holidays
+
+    -   4\. SAVS: Saturday during School Holidays
+
+    -   5\. DIJFP: Sunday and public holidays and bridges
+
+-   **TRNC_HORR_60**: One hour time slot
+
+-   **pourc_validations**: For a station i: Ratio between the number of validations at a station i, on a time slot TH, and the number of validations over the entire day at this station i
+
+-   **YEAR** : The year which the data was collected
+
+#### SPATIAL_DATA
+
+This dataset includes information for each station, along with its corresponding spatial data. It provides key geographic details, enabling analysis of station locations within the network.
+
+-   **nom** : The name of the id_refa
+
+-   **id_refa** : Spatial name code
+
+-   **unite_orga** : Organizational unit
+
+-   **commune** : The department where the station is located
+
+-   **type_arret** : Type of the station :
+
+    -   1\. Arrêt de bus
+    -   2\. Station de métro
+    -   3\. Arrêt de tram
+    -   4\. Station ferrée / Val
+
+-   **ID_REFA_LDA** : Station zone code
+
+-   **nom_lda** : Name of the station
+
+-   **type_objet** : Type of the station object
+
+-   **geometry** : Spatial data used in sf objects to represent geographic features
+
+We decided to combine the annual data frames into a single data frame because we believe it is more advantageous for performing filtering and other queries.
+
+```{r}
+allDataFrameNB = rbind(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020, ANNUAL_NB_FER_2021, ANNUAL_NB_FER_2022, S1_2023_NB_FER)
+
+allDataFrameProfile = rbind(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
+
+
+```
+
+## 2. Exploratory Data Analysis (EDA)
+
+For our graphs, we will use the different datasets that were previously loaded.
+
+### Number of validations across the entire network
+
+The graph below shows the evolution of the monthly validation count from January 2018 to June 2023, for all the combined years and months. The number of validations across the entire network from January 2018 to June 2023 shows a significant drop in validations starting at the end of November 2019, due to the various measures implemented because of COVID-19. The number of validations rebounded after the end of these measures.
+
+```{r}
+allData <- rbind(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020, ANNUAL_NB_FER_2021, ANNUAL_NB_FER_2022, S1_2023_NB_FER)
+
+trendAllData <- allData %>% mutate(
+  year = format(as.Date(JOUR), "%Y"), # Extraire l'année
+  month = format(as.Date(JOUR), "%m") # Extraire la semaine
+) %>%
+  # Créer un regroupement par combinaison unique année-semaine
+  group_by(year_month = paste0(year, "-M", month)) %>%
+  summarise(nb_valid = sum(NB_VALD), .groups = "drop")
+
+ggplot(trendAllData, aes(x=year_month, y=nb_valid, group = 1)) +
+  geom_line(linewidth = 1) +
+  scale_y_continuous(
+    breaks = seq(10000000, max(trendAllData$nb_valid) + 50000000, by = 10000000),
+    labels = scales::label_comma(scale = 1000)
+  ) +
+  theme_bw() +
+  theme_linedraw() + 
+  theme(axis.text.x = element_text(angle = -75)) +
+  ggtitle("Nombre de validations sur tout le réseau du 01/01/2018 au 30/06/2023")
+```
+
+### Number of validation per day
+
+The graph of the number of validations per day below allows us to visualize the number of validations across the entire network based on the day of the week from 2018 to June 2023. We observe that the number of validations is higher on weekdays, due to regular working days, compared to weekends.
+
+```{r}
+dataPerDay <- allData %>%
+  group_by(weekday) %>% summarise(nb_valid = sum(NB_VALD))
+dataPerDay <- dataPerDay[order(dataPerDay$weekday), ]
+
+ggplot(dataPerDay, aes(x=weekday, y=nb_valid))+
+  geom_col(fill = "#0073C2FF") + 
+  geom_text(aes(label = nb_valid), vjust = 1.6, color="white") + 
+  scale_y_continuous(
+    breaks = seq(1000000, max(dataPerDay$nb_valid) + 50000000, by = 50000000),
+    labels = scales::label_comma(scale = 1000)
+  ) +
+  theme_minimal() +
+  ggtitle("Nombre de validations par jour")
+```
+
+### Number of validation per season
+
+The number of validations per season shows that the number of validations is lower in the summer due to school holidays. For the other seasons, since for 2023 we only have the first semester, the rest of the year will have NA values, so we cannot really determine which season dominates.
+
+```{r}
+
+
+dataPerSaison <- allData %>% group_by(saison) %>% summarise(nb_valid = sum(NB_VALD))
+
+ggplot(dataPerSaison, aes(x=saison, y=nb_valid))+
+  geom_col(fill = "#0073C2FF") +
+  geom_text(aes(label = nb_valid), vjust = 1.6, color="white") + 
+  scale_y_continuous(
+    breaks = seq(100000000, max(dataPerSaison$nb_valid) + 5000000000, by = 200000000),
+    labels = scales::label_comma(scale = 1000)
+  ) +
+  theme_minimal() + 
+  ggtitle("Nombre de validations par saisons")
+
+```
+
+### Type of title usage per week
+
+The graph showing the type of ticket usage by week breaks down the different categories of transportation tickets based on the days of the week. According to the graph, it can be observed that the dominant category is the NAVIGO, which is the most used ticket type in Île-de-France.
+
+```{r}
+
+utilisationTitrePerWeek <- allData %>% group_by(CATEGORIE_TITRE, weekday) %>% summarise(nb_valid = sum(NB_VALD))
+
+ggplot(utilisationTitrePerWeek, aes(x = weekday, y = nb_valid)) +
+  geom_col(aes(color = CATEGORIE_TITRE, fill = CATEGORIE_TITRE), position = position_stack()) +
+  scale_y_continuous(
+    breaks = seq(100000000, max(dataPerDay$nb_valid) + 5000000000, by = 200000000),
+    labels = scales::label_comma(scale = 1000)
+  ) +
+  theme_minimal() + 
+  ggtitle("Type d'utilisation de titre par semaine")
+```
+
+### Annual trend graphs
+
+The graphs below were initially intended to be part of our Shiny dashboard. Due to a deployment issue with the application, we were forced to remove them. Therefore, we will present them in this report.
+
+#### Number of validations per year
+
+Graphs show the number of validations per week for each year. The green line represents the maximum number of validations reached during the year, the blue line represents the average, and the red line represents the minimum. We observe a significant drop in the number of validations at the end of 2019 due to COVID-19. In 2020, there was also a decline around the 18th week due to the second quarantine. Since we only have data for the first half of 2023, there is a sharp decline in the middle of the year. After COVID-19, in 2022, we notice that the number of validations remains relatively stable and high throughout the year because people were able to move freely and return to their normal way of life.
+
+```{r}
+aggregated_data <- allDataFrameNB %>%
+    group_by(YEAR, WEEK) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    arrange(YEAR, WEEK)
+  
+  # Calculer le max Y pour l'échelle
+  max_y_dataPerWeek <- max(aggregated_data$n, na.rm = TRUE)
+  
+  generate_week_plot <- function(data, year, max_y) {
+    dataPerWeek <- data %>% filter(YEAR == year)
+    
+    # Calculer les seuils (min, max, mean)
+    stats <- dataPerWeek %>%
+      summarise(
+        minWeek = min(n, na.rm = TRUE),
+        maxWeek = max(n, na.rm = TRUE),
+        meanWeek = mean(n, na.rm = TRUE)
+      )
+    
+    seuil <- data.frame(
+      yintercept = c(stats$minWeek, stats$maxWeek, stats$meanWeek),
+      label = c("min", "max", "mean"),
+      color = c("red", "green", "blue")
+    )
+    
+    ggplot(dataPerWeek, aes(x = WEEK, y = n, group = 1)) +
+      geom_line() +
+      geom_hline(data = seuil, aes(yintercept = yintercept, color = label),
+                 linetype = "dashed", linewidth = 0.8) +
+      theme_minimal() +
+      scale_y_continuous(
+        limits = c(0, max_y),
+        breaks = seq(0, max_y, by = max_y / 10)
+      ) +
+      labs(title = paste("Année :", year)) +
+      scale_color_manual(
+        name = "Seuils",
+        values = setNames(seuil$color, seuil$label)
+      ) +
+      theme(
+        legend.position = "top",
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+      )
+  }
+  
+  
+  plots <- lapply(unique(aggregated_data$YEAR), function(year) {
+    generate_week_plot(aggregated_data, year, max_y_dataPerWeek)
+  })
+  
+  combined_plot <- wrap_plots(plots, ncol = 3) 
+  print(combined_plot)
+  
+```
+
+### Percentage of validations by time slots
+
+For this graph, we used the Montparnasse station and the year 2022 as an example. It shows the percentage of validations based on 1-hour time slots. The blue curve represents the weekdays during school vacation periods, while the red curve represents the weekdays outside of school vacation periods. We observe a significant demand between 6 PM and 7 PM, which may correspond to heavy traffic due to people leaving work. This station also provides access to various metro lines and regional trains.
+
+```{r}
+
+
+dataProfile <- allDataFrameProfile %>% filter(ID_REFA_LDA == 71139)
+
+generate_HV_VS <- function(data) {
+  # Variable pour le maximum des validations pour échelle de Y
+  max_y_pourc_valid <- max(data %>% 
+                             group_by(CAT_JOUR, TRNC_HORR_60, YEAR) %>%
+                             summarize(n = mean(pourc_validations)) %>%
+                             mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60))) %>%
+                             pull(n))
+    
+    # Filtrage et calcul des moyennes pour les périodes scolaires
+    scolarPeriod <- data %>% 
+      filter(YEAR == 2022) %>%
+      group_by(CAT_JOUR, TRNC_HORR_60) %>% 
+      filter(CAT_JOUR == 'JOVS' | CAT_JOUR == "SAVS") %>%
+      summarize(pourc_validations_mean = mean(pourc_validations)) %>%
+      mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60)))
+    
+    # Filtrage et calcul des moyennes pour les périodes de travail
+    taffPeriod <- data %>% 
+      filter(YEAR == 2022) %>%
+      group_by(CAT_JOUR, TRNC_HORR_60) %>% 
+      filter(CAT_JOUR == 'JOHV' | CAT_JOUR == "SAHV") %>%
+      summarize(pourc_validations_mean = mean(pourc_validations)) %>%
+      mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60)))
+    
+    # Création du graphique
+    p <- ggplot() +
+      geom_line(data = scolarPeriod, aes(x = Heure_Val, y = pourc_validations_mean, 
+                                         group = 1, color = "Jour Ouvré en Période de Vacances Scolaires")) +
+      geom_line(data = taffPeriod, aes(x = Heure_Val, y = pourc_validations_mean, 
+                                       group = 1, color = "Jour Ouvré Hors Vacances Scolaires")) +
+      theme_bw() +
+      xlab("Tranche horaire 1H") + ylab("validations / 100") +
+      scale_x_continuous(
+        breaks = scolarPeriod$Heure_Val, 
+        labels = scolarPeriod$TRNC_HORR_60
+      ) +
+      scale_y_continuous(
+        limits = c(0, max_y_pourc_valid),
+        breaks = seq(0, max_y_pourc_valid, by = max_y_pourc_valid / 10) 
+      ) +
+      labs(
+        title = paste("Année :", 2022)
+      ) +
+      scale_color_brewer("Saison", palette = "Spectral") +
+      guides(colour = "legend", size = "legend") +
+      scale_color_manual(
+        name = "Périodes",
+        values = c("Jour Ouvré en Période de Vacances Scolaires" = "blue", 
+                   "Jour Ouvré Hors Vacances Scolaires" = "red")
+      ) +
+      theme_minimal() +
+      theme(
+        legend.position = "bottom", 
+        axis.text.x = element_text(angle = 45, hjust = 1) 
+      )
+
+  return(p)
+}
+
+graph_2022 <- generate_HV_VS(dataProfile)
+print(graph_2022)
+```
+
+### Trends in ticket validations based on time slots and day categories
+
+The graphs allow us to visualize the trends in ticket validations based on time slots and day categories (vacation or not, weekend or weekday) at Gare Montparnasse, as well as compare these trends year over year. They are useful for understanding passenger behavior and adjusting transport services based on peak hours and holiday periods. JOVS refers to weekdays during school holidays, SAVS refers to Saturdays and Sundays during school holidays, JOHV represents weekdays outside of school holiday periods, and SAHV corresponds to Saturdays and Sundays outside of school holidays. We notice that the traffic is lower on weekends, whether during school holidays or outside of them, compared to weekdays.
+
+```{r}
+
+generate_Jour <- function(data) {
+    max_y_pourc_valid = max(allDataFrameProfile %>% 
+                              group_by(CAT_JOUR, TRNC_HORR_60, YEAR) %>%
+                              summarize(n = mean(pourc_validations)) %>%
+                              mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60))) %>%
+                              pull(n))
+    plots_Jour <- list()
+    for (cat in c("JOVS", "SAVS", "JOHV", "SAHV")) {
+      data_filtered <- data %>% 
+        group_by(CAT_JOUR, TRNC_HORR_60, YEAR) %>%
+        filter(CAT_JOUR == cat) %>%
+        summarize(pourc_validations_mean = mean(pourc_validations)) %>%
+        mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60)))
+      
+      p <- ggplot(data_filtered, aes(x = Heure_Val, y = pourc_validations_mean,color = as.factor(YEAR), group = YEAR)) +
+        geom_line(linewidth = 1) +
+        labs(
+          title = cat,
+          x = "Tranche horaire",
+          y = "% de validations",
+          color = "Année"
+        ) +
+        scale_x_continuous(
+          breaks = data$Heure_Val, 
+          labels = data$TRNC_HORR_60
+        ) +
+        scale_y_continuous(
+          limits = c(0, max_y_pourc_valid),
+          breaks = seq(0, max_y_pourc_valid, by = max_y_pourc_valid / 10) 
+        ) +
+        theme_minimal() +
+        theme(
+          legend.position = "bottom", # Légende en bas
+          plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+          axis.text.x = element_text(angle = -90, hjust = 1)   # Rotation des labels de l'axe X
+        )
+      plots_Jour <- append(plots_Jour, list(p))
+    }
+    return(plots_Jour)
+}
+
+graph_2022_jour <- generate_Jour(dataProfile)
+
+combined_plot <- wrap_plots(graph_2022_jour, ncol = 2)  
+print(combined_plot)
+
+```
+
+## 3. Comparison with Norms
+
+We have a graph that displays the curves for days during school holidays and non-holiday periods, showing the number of validations based on time slots. The days during holidays and school periods follow the same trend. Indeed, we observe that the peaks of validations occur at the same time slots, namely between 7 AM and 9 AM, as well as between 5 PM and 7 PM.
+
+```{r}
+
+allDataProfile = rbind(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
+
+max_y_pourc_valid = max(allDataProfile %>% 
+                          group_by(CAT_JOUR, TRNC_HORR_60, YEAR) %>%
+                          summarize(n = mean(pourc_validations)) %>%
+                          mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60))) %>%
+                          pull(n))
+
+scolarPeriod = allDataProfile %>%
+      group_by(CAT_JOUR, TRNC_HORR_60) %>% 
+      filter(CAT_JOUR == 'JOVS' | CAT_JOUR == "SAVS") %>%
+      summarize(pourc_validations_mean = mean(pourc_validations)) %>%
+      mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60)))
+    
+    taffPeriod = allDataProfile %>%    group_by(CAT_JOUR, TRNC_HORR_60) %>% 
+      filter(CAT_JOUR == 'JOHV' | CAT_JOUR == "SAHV") %>%
+      summarize(pourc_validations_mean = mean(pourc_validations)) %>%
+      mutate(Heure_Val = as.numeric(gsub("H-.*", "", TRNC_HORR_60))) 
+    
+  ggplot() +
+      geom_line(data = scolarPeriod, aes(x = Heure_Val, y=pourc_validations_mean, 
+                                         group=1, color = "Jour Ouvré en Période de Vacances Scolaires")) +
+      geom_line(data = taffPeriod, aes(x = Heure_Val, y=pourc_validations_mean, 
+                                       group=1, color = "Jour Ouvré Hors Vacances Scolaires")) +
+      theme_bw()+
+      xlab("Tranche horaire 1H") + ylab("validations / 100")+
+      scale_x_continuous(
+        breaks = scolarPeriod$Heure_Val, 
+        labels = scolarPeriod$TRNC_HORR_60
+      ) +
+      scale_y_continuous(
+        limits = c(0, max_y_pourc_valid),
+        breaks = seq(0, max_y_pourc_valid, by = max_y_pourc_valid / 10) 
+      ) +     scale_color_brewer("Saison",palette ="Spectral")+
+      guides(colour = "legend", size = "legend")+
+      scale_color_manual(
+        name = "Périodes", # Nom de la légende
+        values = c("Jour Ouvré en Période de Vacances Scolaires" = "blue", 
+                   "Jour Ouvré Hors Vacances Scolaires" = "red")
+      ) +
+      theme_minimal() +
+      theme(
+        legend.position = "bottom", # Légende en bas
+        axis.text.x = element_text(angle = 45, hjust = 1)  # Rotation des labels de l'axe X
+      )
+
+
+```
+
+## 4. Dashboard Development using Shiny
+
+Due to a deployment issue, we were unable to deploy the application via shinyapps.io. We tried removing some elements from our app.R file and optimizing it, but an error persisted. It is possible that this was due to high memory usage. However, our application is still functional locally, and we will present it in the following sections of this document.
+
+We have developed an interactive Shiny dashboard divided into two tabs.
+
+The first tab displays a map of Île-de-France showing different stations according to the type of stop and the department. The user can change the department as well as the type of stop. When clicking on one of the stations displayed on the map, various information about the station is shown below the map in the form of text. We removed the "Bus Stop" type from the stop type selection as we don't have information available for this type of stop.
+
+The second tab is designed to compare a reference period with a comparison period, which the user will select beforehand. They will need to press one of the four buttons to display two graphs corresponding to the two periods for comparison.
+
+```{r}
+SPATIAL_DATA <- st_transform(SPATIAL_DATA, crs = 4326)
+
+################################################################################
+# fonction                                                                     #
+################################################################################
+
+
+generate_nb_valid_day_period <- function(period) {
+  dataPerDayPeriod <- allDataFrameNB %>% 
+    filter(as.Date(JOUR) >= as.Date(period[1]) & as.Date(JOUR) <= as.Date(period[2])) %>%
+    group_by(weekday) %>% summarise(nb_valid = sum(NB_VALD))
+  dataPerDayPeriod <- dataPerDayPeriod[order(dataPerDayPeriod$weekday), ]
+  
+  return(dataPerDayPeriod)
+}
+
+generate_categorie_titre_period <- function(period) {
+  utilisationTitrePeriod <- allDataFrameNB %>% 
+    filter(as.Date(JOUR) >= as.Date(period[1]) & as.Date(JOUR) <= as.Date(period[2]))%>%
+    group_by(CATEGORIE_TITRE, WEEK) %>% 
+    summarise(nb_valid = mean(NB_VALD))
+  
+  return(utilisationTitrePeriod)
+}
+
+generate_nb_valid_season <- function(period) {
+  dataPerSaison <- allDataFrameNB %>% 
+    filter(as.Date(JOUR) >= as.Date(period[1]) & as.Date(JOUR) <= as.Date(period[2])) %>% 
+    group_by(saison) %>% 
+    summarise(nb_valid = sum(NB_VALD))
+  
+  return(dataPerSaison)
+}
+
+create_plots_nb_valid_day <- function(dataRef, dataCompare, period_ref, period_compare) {
+  plots_nb_valid_day <- list()
+  max_y_nb_valid_day <- max(dataRef$nb_valid, dataCompare$nb_valid)
+  
+  p <- ggplot(dataRef, aes(x=weekday, y=nb_valid))+
+    geom_col(fill = "#0073C2FF") + 
+    geom_text(aes(label = nb_valid), vjust = 1.6, color="white") + 
+    scale_y_continuous(
+      limits = c(0, max_y_nb_valid_day),
+      breaks = seq(0, max_y_nb_valid_day, by = max_y_nb_valid_day / 10) 
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+    ) +
+    labs(
+      title = paste0("Période référence du ", period_ref[1], " au ", period_ref[2])
+    )
+  plots_nb_valid_day <- append(plots_nb_valid_day, list(p))
+  
+  p <- ggplot(dataCompare, aes(x=weekday, y=nb_valid))+
+    geom_col(fill = "#0073C2FF") + 
+    geom_text(aes(label = nb_valid), vjust = 1.6, color="white") + 
+    scale_y_continuous(
+      limits = c(0, max_y_nb_valid_day),
+      breaks = seq(0, max_y_nb_valid_day, by = max_y_nb_valid_day / 10) 
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+    ) +
+    labs(
+      title = paste0("Période à comparer du ", period_compare[1], " au ", period_compare[2])
+    )
+  plots_nb_valid_day <- append(plots_nb_valid_day, list(p))
+}
+
+create_plots_categorie_titre <- function(dataRef, dataCompare, period_ref, period_compare) {
+  plots_categorie_titre <- list()
+  max_y_plots_categorie_titre <- max(dataRef$nb_valid, dataCompare$nb_valid)
+  
+  p <- ggplot(dataRef, aes(x = WEEK, y = nb_valid)) +
+    geom_line(aes(color = CATEGORIE_TITRE)) +
+    scale_y_continuous(
+      limits = c(0, max_y_plots_categorie_titre),
+      breaks = seq(0, max_y_plots_categorie_titre, by = max_y_plots_categorie_titre / 10) 
+    ) +
+    theme_light() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+    ) +
+    labs(
+      title = paste0("Période référence du ", period_ref[1], " au ", period_ref[2])
+    )
+  plots_categorie_titre <- append(plots_categorie_titre, list(p))
+  
+  p <- ggplot(dataCompare, aes(x = WEEK, y = nb_valid)) +
+    geom_line(aes(color = CATEGORIE_TITRE)) +
+    scale_y_continuous(
+      limits = c(0, max_y_plots_categorie_titre) ,
+      breaks = seq(0, max_y_plots_categorie_titre, by = max_y_plots_categorie_titre / 10) 
+    ) +
+    theme_light() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+    ) +
+    labs(
+      title = paste0("Période à comparer du ", period_compare[1], " au ", period_compare[2])
+    )
+  plots_categorie_titre <- append(plots_categorie_titre, list(p))
+}
+
+create_plots_nb_valid_season <- function(dataRef, dataCompare, period_ref, period_compare) {
+  plots_nb_valid_season <- list()
+  max_y_nb_valid_season <- max(dataRef$nb_valid, dataCompare$nb_valid)
+  
+  p <- ggplot(dataRef, aes(x=saison, y=nb_valid))+
+    geom_col(fill = "#0073C2FF") +
+    geom_text(aes(label = nb_valid), vjust = 1.6, color="white") + 
+    scale_y_continuous(
+      limits = c(0, max_y_nb_valid_season),
+      breaks = seq(0, max_y_nb_valid_season, by = max_y_nb_valid_season / 10) 
+    ) +
+    theme_minimal() + 
+    theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+    ) +
+    labs(
+      title = paste0("Période référence du ", period_ref[1], " au ", period_ref[2])
+    )
+  plots_nb_valid_season <- append(plots_nb_valid_season, list(p))
+  
+  p <- ggplot(dataCompare, aes(x=saison, y=nb_valid))+
+    geom_col(fill = "#0073C2FF") +
+    geom_text(aes(label = nb_valid), vjust = 1.6, color="white") + 
+    scale_y_continuous(
+      limits = c(0, max_y_nb_valid_season),
+      breaks = seq(0, max_y_nb_valid_season, by = max_y_nb_valid_season / 10) 
+    ) +
+    theme_minimal() + 
+    theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+    ) +
+    labs(
+      title = paste0("Période à comparer du ", period_compare[1], " au ", period_compare[2])
+    )
+  plots_nb_valid_season <- append(plots_nb_valid_season, list(p))
+}
+
+ui <- fluidPage(
+  # Titre principal au-dessus de la barre
+  titlePanel("Fréquentation Réseau ferré - Île-de-France"),
+  navbarPage(
+    title = NULL,
+    tabPanel("Tendances par arrêt",
+             sidebarLayout(
+               sidebarPanel(
+                 selectInput("dep",
+                             label = "Sélectionner un département : ",
+                             choices = c("75", "77", "78", "95", "94", "93", "92", "91")),
+                 
+                 selectInput("type_arret",
+                             label = "Sélectionner un type d'arrêt : ",
+                             choices = c("Station ferrée / Val", "Station de métro", "Arrêt de tram")),
+               ),
+               mainPanel(
+                 fluidRow(
+                   column(12, h1(textOutput("infos"), style = "text-align: center; margin-bottom: 20px;"))
+                 ),
+                 fluidRow(
+                   column(12, leafletOutput("map", height = "350px"))
+                 ),
+                 fluidRow(
+                   column(12, verbatimTextOutput("click_info"))
+                 )
+               )
+             )
+    ),
+    tabPanel("Comparaison des Périodes",
+             flowLayout(
+               dateRangeInput("period_ref",
+                              label = "Période référence :",
+                              start = "2018-01-01",
+                              end = "2023-06-30",
+                              min = "2018-01-01",
+                              max = "2023-06-30",
+                              format = "mm/dd/yy",
+                              separator = " / "),
+               
+               dateRangeInput("period_compare",
+                              label = "Période à comparer :",
+                              start = "2018-01-01",
+                              end = "2023-06-30",
+                              min = "2018-01-01",
+                              max = "2023-06-30",
+                              format = "mm/dd/yy",
+                              separator = " / ")),
+             
+             fluidRow(
+               column(4,
+                      verticalLayout(
+                        actionButton("graph_2", "Nombre de validations par jour", style = "font-size: 20px; padding: 10px 20px; margin-bottom: 10px; width: 485px;"),
+                        actionButton("graph_3", "Type d'utilisation de titre par semaine en moyenne", style = "font-size: 20px; padding: 10px 20px; margin-bottom: 10px;"),
+                        actionButton("graph_4", "Nombre de validations par saison", style = "font-size: 20px; padding: 10px 20px; margin-bottom: 10px; width: 485px;"),
+                      )
+               ),
+             ),
+             fluidRow(
+               column(12,
+                      plotOutput("graph_ref", height = "500px", width = "100%")
+               )
+             )
+    ),
+    tags$head(
+      tags$style(HTML("
+      #gridPlot, #gridPlotWeekMean {
+        max-width: 100%;
+      }
+      .btn {
+        font-size: 20px;
+      }
+    "))
+    )
+  )
+)
+
+#  Serveur
+server <- function(input, output) {
+################################################################################
+# Filtrage des données reactives                                               #
+################################################################################
+   filtered_data <- reactive({
+     dep_select <- input$dep
+     type_arret_select <- input$type_arret
+     
+     SPATIAL_DATA %>%
+       filter(substr(commune, 1, 2) == dep_select, type_arret == type_arret_select)
+   })
+  
+################################################################################
+# Gestion des données après clic sur la carte                                  #
+################################################################################
+   click_data <- reactive({
+     click <- input$map_shape_click
+     if (is.null(click)) return(NULL)
+    
+     id_refa_click <- SPATIAL_DATA %>%
+       filter(nom == click$id) %>%
+       pull(ID_REFA_LDA)
+    
+     dataProfile <- allDataFrameProfile %>% filter(ID_REFA_LDA == id_refa_click)
+     print(id_refa_click)
+     dataNB <- allDataFrameNB %>% filter(ID_REFA_LDA == id_refa_click)
+    
+     heure_pointe <- dataProfile %>%
+       group_by(TRNC_HORR_60) %>%
+       summarise(total = sum(pourc_validations), .groups = "drop") %>%
+       slice_max(total, n = 1)
+    
+     categorie_dominante <- dataNB %>%
+       group_by(CATEGORIE_TITRE) %>%
+       summarise(total = sum(NB_VALD), .groups = "drop") %>%
+       slice_max(total, n = 1)
+    
+     valid_mean <- dataNB %>% summarise(nb_valid = mean(NB_VALD, na.rm = TRUE))
+    
+     list(
+       heure_pointe = heure_pointe,
+       categorie_dominante = categorie_dominante,
+       click_id = click$id,
+       valid_mean = valid_mean
+     )
+   })
+  
+################################################################################
+# Affichage de la carte Leaflet                                                #
+################################################################################
+   output$map <- renderLeaflet({
+     data <- filtered_data()
+    
+     if (nrow(data) == 0) {
+       leaflet() %>%
+         addTiles() %>%
+         addPopups(
+           lng = 2.3522, lat = 48.8566,
+           popup = "Aucun arrêt de ce type dans ce département"
+         )
+     } else {
+       leaflet(data) %>%
+         addTiles() %>%
+         addPolygons(
+           weight = 4,
+           color = "blue",
+           label = data$nom,
+           layerId = data$nom
+         )
+     }
+   })
+  
+################################################################################
+# Affichage des informations après clic                                        #
+################################################################################
+   output$click_info <- renderText({
+     click_info <- click_data()
+     
+     if (is.null(click_info)) return("Cliquez sur un élément de la carte.")
+     
+     paste(
+       "Vous avez cliqué sur :", click_info$click_id,
+       "\nHeure de pointe :", click_info$heure_pointe$TRNC_HORR_60,
+       "\nCatégorie dominante :", click_info$categorie_dominante$CATEGORIE_TITRE,
+       "\nNombre de validations moyen :", click_info$valid_mean$nb_valid
+     )
+   })
+  
+################################################################################
+# Graphes à comparer                                                           #
+################################################################################
+  
+  render_graph <- function(graph_id, data_function, plot_function) {
+    observeEvent(input[[graph_id]], {
+      output$graph_ref <- renderPlot({
+        dataRef <- data_function(input$period_ref)
+        dataCompare <- data_function(input$period_compare)
+        plots_list <- plot_function(dataRef, dataCompare, input$period_ref, input$period_compare)
+        
+        wrap_plots(plots_list, ncol = 2, nrow = 1)
+      })
+    })
+  }
+  
+  #  Définition des observers pour chaque graphe
+  render_graph("graph_2", generate_nb_valid_day_period, create_plots_nb_valid_day)
+  render_graph("graph_3", generate_categorie_titre_period, create_plots_categorie_titre)
+  render_graph("graph_4", generate_nb_valid_season, create_plots_nb_valid_season)
+
+}
+
+#  Lancer l'application Shiny
+shinyApp(ui = ui, server = server)
+
+
+```

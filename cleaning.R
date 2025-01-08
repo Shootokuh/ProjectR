@@ -222,6 +222,7 @@ S1_2023_NB_FER$saison <- sapply(as.Date(S1_2023_NB_FER$JOUR), get_season)
 rm(list = ls(pattern = "^(S1|S2)_(2018|2019|2020|2021|2022)_NB_FER$"))
 rm(list = ls(pattern = "^(S1|S2)_(2018|2019|2020|2021|2022)_PROFIL_FER$"))
 
+#Stockage des données annuelles dans une seule dataframe
 allDataFrameNB = rbind(ANNUAL_NB_FER_2018, ANNUAL_NB_FER_2019, ANNUAL_NB_FER_2020, ANNUAL_NB_FER_2021, ANNUAL_NB_FER_2022, S1_2023_NB_FER)
 
 allDataFrameProfile = rbind(ANNUAL_PROFIL_FER_2018, ANNUAL_PROFIL_FER_2019, ANNUAL_PROFIL_FER_2020, ANNUAL_PROFIL_FER_2021, ANNUAL_PROFIL_FER_2022)
